@@ -11,10 +11,10 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 import java.util.ArrayList;
 
-/**
- * Manejador global de excepciones centralizado para interceptar errores de validación de request
- * y fallos inesperados en la aplicación.
- **/
+
+ // Manejador global de excepciones centralizado para interceptar errores de validación de request
+ // y fallos inesperados en la aplicación.
+
 @RestControllerAdvice
 @Slf4j
 public class GlobalExceptionHandler {

@@ -59,9 +59,10 @@ com.proyecto.servicios
 
 ## 4. Decisiones Técnicas e Implementación
 
-### 4.1. Configuración y Autenticación Segura (Sin Hardcodeo)
-- **Decisión**: Para dar cumplimiento a la restricción de no tener tokens hardcodeados en el código fuente, la propiedad `gestopago.products.bearer-token` se definió en `application.properties`.
-- **Resolución Dinámica**: En la capa de servicio (`GestoPagoProductoServiceImpl`), se implementó un mecanismo de resolución que consulta primero la entidad de token activo en base de datos (`GestoPagoTokenService`) y, en caso de ausencia, utiliza la propiedad inyectada mediante `@Value` como respaldo (fallback).
+### 4.1. Configuración y Autenticación Segura (Sin Hardcodeo y Renovación Automática)
+- **Decisión**: Para dar cumplimiento a la restricción de no tener tokens hardcodeados en el código fuente, las propiedades de integración se configuraron dinámicamente en `application.properties`.
+- **Automatización del Token (Vigencia 24h)**: Se implementó un proceso en segundo plano con la anotación `@Scheduled(fixedRateString = "${gestopago.auth.refresh-rate-ms:3600000}")` en `GestoPagoTokenServiceImpl`. Este servicio invoca periódicamente el endpoint `/sistema/app/jwt-gp/authenticate/` del proveedor con las credenciales configuradas (`id-distribuidor=83`, `codigo-dispositivo=GPS83-TPV-17`, `password=12345678`), obtiene un token nuevo y lo almacena automáticamente en la entidad `GestoPagoToken` en Base de Datos PostgreSQL.
+- **Mecanismo de Respaldo (Fallback)**: En la capa de servicio (`GestoPagoProductoServiceImpl`), el método `resolverBearerToken()` busca primero la entidad de token activo en la base de datos y, en caso de no encontrarse, utiliza la propiedad inyectada `gestopago.products.bearer-token` como respaldo defensivo.
 - **Formateo de Encabezado**: Se asegura de agregar el prefijo `Bearer ` dinámicamente antes de enviar la solicitud HTTP en el cliente Feign.
 
 ### 4.2. Mapeo y Transformación de Formato (XML a JSON)
@@ -91,43 +92,83 @@ com.proyecto.servicios
 
 ## 5. Pruebas Unitarias y Cobertura
 
-Se implementó la clase de prueba `GestoPagoProductoServiceImplTest` utilizando **JUnit 5** y **Mockito**. Se agregaron las dependencias de prueba correspondientes en `build.gradle` (`testRuntimeOnly 'org.junit.platform:junit-platform-launcher'`).
+Se implementó la clase de prueba `GestoPagoProductoServiceImplTest` utilizando **JUnit 5** y **Mockito**. Se configuró la tarea de pruebas en `build.gradle` con `testLogging` para visibilidad de ejecuciones.
 
 ### Escenarios Probados:
 1. `obtenerProductos_Exitoso`: Simula la respuesta exitosa del cliente Feign con productos en XML, verificando la transformación correcta a DTOs y la lista no nula.
 2. `obtenerProductos_ErrorComunicacion_FeignException`: Simula una falla de red o tiempo de espera (Timeout) mediante una excepción `FeignException.ServiceUnavailable`, comprobando que la aplicación responda con código `"503"` sin lanzar errores 500 no controlados.
 3. `obtenerProductos_ErrorAutenticacion_Unauthorized`: Simula una falla de autenticación 401 (`FeignException.Unauthorized`), verificando el retorno controlado con código `"401"`.
 
-**Resultado de Ejecución**:
-```bash
-> Task :compileJava UP-TO-DATE
-> Task :compileTestJava UP-TO-DATE
-> Task :test
+**Resultado de Ejecución (`.\gradlew.bat test`)**:
+```text
+GestoPagoProductoServiceImplTest > Debe manejar gracefully un error de comunicación FeignException sin devolver nulos PASSED
+GestoPagoProductoServiceImplTest > Debe manejar error 401 Unauthorized devolviendo respuesta estandarizada PASSED
+GestoPagoProductoServiceImplTest > Debe obtener la lista de productos exitosamente y mapear correctamente desde el XML PASSED
 
-BUILD SUCCESSFUL in 19s
-5 actionable tasks: 2 executed, 3 up-to-date
+BUILD SUCCESSFUL in 9s
+5 actionable tasks: 3 executed, 2 up-to-date
 ```
 
 ---
 
 ## 6. Guía de Pruebas en Postman
 
-Para validar la solución en un entorno local:
+Para validar el funcionamiento del endpoint en entorno local:
 
-1. **Endpoint**: `POST http://localhost:8090/api/v1/gestopago/productos`
-2. **Encabezados**: `Content-Type: application/json`
-3. **Cuerpo de la Petición Exitosas (JSON)**:
-   ```json
-   {
-     "usuario": "usuario_prueba",
-     "password": "password123"
-   }
-   ```
-4. **Cuerpo de la Petición con Error de Validación (JSON)**:
-   ```json
-   {
-     "usuario": "usuario_prueba",
-     "password": "123"
-   }
-   ```
-   *Respuesta esperada*: Código `"400"` con el mensaje `"La contraseña debe tener al menos 7 caracteres."` y lista de productos vacía `[]`.
+1. **Método HTTP**: `POST`
+2. **URL**: `http://localhost:8090/api/v1/gestopago/productos`
+3. **Encabezados (Headers)**: `Content-Type: application/json`
+4. **Autenticación en Postman**: `No Auth` (El token es manejado y adjuntado automáticamente por el backend de Spring Boot hacia GestoPago).
+
+### Ejemplos de Peticiones y Respuestas:
+
+#### A. Consulta Exitosa (HTTP 200 OK)
+- **Request Body (JSON)**:
+  ```json
+  {
+    "usuario": "usuario_prueba",
+    "password": "password123"
+  }
+  ```
+- **Response (JSON)**:
+  ```json
+  {
+    "codigo": "01",
+    "mensaje": "Operación realizada con éxito",
+    "productos": [
+      {
+        "servicio": "ABIB",
+        "producto": "ABIB 100",
+        "precio": 100.0,
+        "hasDigitoVerificador": false
+      }
+    ]
+  }
+  ```
+
+#### B. Error de Validación (Contraseña < 7 caracteres)
+- **Request Body (JSON)**:
+  ```json
+  {
+    "usuario": "usuario_prueba",
+    "password": "123"
+  }
+  ```
+- **Response (JSON)**:
+  ```json
+  {
+    "codigo": "400",
+    "mensaje": "La contraseña debe tener al menos 7 caracteres.",
+    "productos": []
+  }
+  ```
+
+#### C. Error de Token Expirado (HTTP 401)
+- **Response (JSON)**:
+  ```json
+  {
+    "codigo": "401",
+    "mensaje": "El token de autenticación de GestoPago ha expirado (válido por 24 horas). Se requiere renovar el token.",
+    "productos": []
+  }
+  ```

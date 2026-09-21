@@ -5,10 +5,10 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-/**
- * DTO limpio de negocio que representa un producto de GestoPago.
- * Garantiza que todos sus campos tengan valores válidos por defecto (evitando nulos).
- */
+
+ // DTO limpio de negocio que representa un producto de GestoPago.
+ // Garantiza que todos sus campos tengan valores válidos por defecto (evitando nulos).
+
 @Data
 @Builder
 @NoArgsConstructor
