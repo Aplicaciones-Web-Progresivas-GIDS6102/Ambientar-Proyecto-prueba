@@ -3,13 +3,18 @@ package com.proyecto.servicios.service;
 import com.proyecto.servicios.model.gestopago.ConsultaProductosRequest;
 import com.proyecto.servicios.model.gestopago.ConsultaProductosResponse;
 
-
-// Interfaz del servicio de negocio para la gestión y consulta de productos de GestoPago.
-
+/**
+ * Interfaz de la capa de negocio para la gestión, consulta y sincronización de productos de GestoPago.
+ */
 public interface GestoPagoProductoService {
 
-    // Obtiene la lista de productos disponibles desde el servicio externo de GestoPago.
-    //@param request Petición con datos de entrada validados.
-    //@return ConsultaProductosResponse DTO con el resultado de la operación y la lista de productos sin valores nulos.
-     ConsultaProductosResponse obtenerProductos(ConsultaProductosRequest request);
+    /**
+     * Obtiene la lista de productos disponibles. Prioriza la caché en Redis y recurre a la BD PostgreSQL si falla.
+     */
+    ConsultaProductosResponse obtenerProductos(ConsultaProductosRequest request);
+
+    /**
+     * Sincroniza la lista de productos con el proveedor externo y la ordena por tipoFront (menor a mayor).
+     */
+    ConsultaProductosResponse sincronizarProductos();
 }
