@@ -5,9 +5,7 @@ import lombok.*;
 
 import java.time.LocalDateTime;
 
-/**
- * Entidad JPA para la persistencia de productos GestoPago en PostgreSQL.
- */
+
 @Entity
 @Table(name = "gestopago_productos")
 @Getter

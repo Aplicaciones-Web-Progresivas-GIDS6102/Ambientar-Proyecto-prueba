@@ -1,5 +1,7 @@
 package com.proyecto.servicios.config;
 
+import com.proyecto.servicios.model.ErrorResponse;
+import com.proyecto.servicios.model.gestopago.ConsultaProductosRequest;
 import com.proyecto.servicios.model.gestopago.ConsultaProductosResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -9,52 +11,71 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.List;
 
 /**
- * Manejador global de excepciones centralizado para interceptar errores de validación de request
- * y fallos inesperados en la aplicación.
- **/
+ * Manejador global de excepciones desacoplado.
+ * 
+ * Justificación Técnica: Permite que el código legacy de GestoPago conserve su contrato
+ * específico (HTTP 200 con ConsultaProductosResponse), mientras que los demás endpoints
+ * utilicen el estándar REST (ErrorResponse con códigos de estado HTTP semánticos 400, 500, etc.).
+ */
 @RestControllerAdvice
 @Slf4j
 public class GlobalExceptionHandler {
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
-    public ResponseEntity<ConsultaProductosResponse> handleValidationExceptions(MethodArgumentNotValidException ex) {
+    public ResponseEntity<?> handleValidationExceptions(MethodArgumentNotValidException ex) {
+        List<String> errores = new ArrayList<>();
         StringBuilder sb = new StringBuilder();
-        
+
         for (FieldError fieldError : ex.getBindingResult().getFieldErrors()) {
             if (sb.length() > 0) {
                 sb.append(" | ");
             }
-            sb.append(fieldError.getDefaultMessage());
+            String msg = fieldError.getDefaultMessage();
+            sb.append(msg);
+            errores.add(fieldError.getField() + ": " + msg);
         }
 
         String mensajeError = sb.length() > 0 ? sb.toString() : "Error en los parámetros de entrada de la petición.";
         log.warn("Falla de validación en Request: {}", mensajeError);
 
-        ConsultaProductosResponse response = ConsultaProductosResponse.builder()
+        // Compatibilidad Legacy para GestoPago (mantiene HTTP 200 OK con DTO ConsultaProductosResponse)
+        if (ex.getBindingResult().getTarget() instanceof ConsultaProductosRequest) {
+            ConsultaProductosResponse legacyResponse = ConsultaProductosResponse.builder()
+                    .codigo("400")
+                    .mensaje(mensajeError)
+                    .productos(new ArrayList<>())
+                    .build();
+            return new ResponseEntity<>(legacyResponse, HttpStatus.OK);
+        }
+
+        // Estándar REST para el resto de la aplicación (HTTP 400 Bad Request con ErrorResponse)
+        ErrorResponse errorResponse = ErrorResponse.builder()
                 .codigo("400")
-                .mensaje(mensajeError)
-                .productos(new ArrayList<>())
+                .mensaje("Error de validación en los parámetros de entrada.")
+                .estado(HttpStatus.BAD_REQUEST.value())
+                .timestamp(LocalDateTime.now())
+                .detalles(errores)
                 .build();
 
-        // Retorna HTTP 200 OK con el cuerpo conteniendo el detalle del error de validación
-        return new ResponseEntity<>(response, HttpStatus.OK);
+        return new ResponseEntity<>(errorResponse, HttpStatus.BAD_REQUEST);
     }
 
-    //Manejador genérico para capturar cualquier excepción no controlada.
-
     @ExceptionHandler(Exception.class)
-    public ResponseEntity<ConsultaProductosResponse> handleGenericException(Exception ex) {
+    public ResponseEntity<ErrorResponse> handleGenericException(Exception ex) {
         log.error("Excepción no controlada en el sistema: {}", ex.getMessage(), ex);
 
-        ConsultaProductosResponse response = ConsultaProductosResponse.builder()
+        ErrorResponse errorResponse = ErrorResponse.builder()
                 .codigo("500")
                 .mensaje("Ocurrió un error inesperado al procesar la solicitud.")
-                .productos(new ArrayList<>())
+                .estado(HttpStatus.INTERNAL_SERVER_ERROR.value())
+                .timestamp(LocalDateTime.now())
                 .build();
 
-        return new ResponseEntity<>(response, HttpStatus.OK);
+        return new ResponseEntity<>(errorResponse, HttpStatus.INTERNAL_SERVER_ERROR);
     }
 }
