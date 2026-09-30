@@ -1,5 +1,6 @@
 package com.proyecto.servicios.config;
 
+import com.proyecto.servicios.exception.*;
 import com.proyecto.servicios.model.ErrorResponse;
 import com.proyecto.servicios.model.gestopago.ConsultaProductosRequest;
 import com.proyecto.servicios.model.gestopago.ConsultaProductosResponse;
@@ -18,13 +19,60 @@ import java.util.List;
 /**
  * Manejador global de excepciones desacoplado.
  * 
- * Justificación Técnica: Permite que el código legacy de GestoPago conserve su contrato
- * específico (HTTP 200 con ConsultaProductosResponse), mientras que los demás endpoints
- * utilicen el estándar REST (ErrorResponse con códigos de estado HTTP semánticos 400, 500, etc.).
+ * Permite que el código legacy de GestoPago conserve su contrato específico,
+ * mientras que el sistema bancario utiliza respuestas REST estandarizadas.
  */
 @RestControllerAdvice
 @Slf4j
 public class GlobalExceptionHandler {
+
+    @ExceptionHandler(ClienteNoEncontradoException.class)
+    public ResponseEntity<ErrorResponse> handleClienteNoEncontrado(ClienteNoEncontradoException ex) {
+        log.warn("Cliente no encontrado: {}", ex.getMessage());
+        ErrorResponse errorResponse = ErrorResponse.builder()
+                .codigo("404")
+                .mensaje(ex.getMessage())
+                .estado(HttpStatus.NOT_FOUND.value())
+                .timestamp(LocalDateTime.now())
+                .build();
+        return new ResponseEntity<>(errorResponse, HttpStatus.NOT_FOUND);
+    }
+
+    @ExceptionHandler(CuentaNoEncontradaException.class)
+    public ResponseEntity<ErrorResponse> handleCuentaNoEncontrada(CuentaNoEncontradaException ex) {
+        log.warn("Cuenta no encontrada: {}", ex.getMessage());
+        ErrorResponse errorResponse = ErrorResponse.builder()
+                .codigo("404")
+                .mensaje(ex.getMessage())
+                .estado(HttpStatus.NOT_FOUND.value())
+                .timestamp(LocalDateTime.now())
+                .build();
+        return new ResponseEntity<>(errorResponse, HttpStatus.NOT_FOUND);
+    }
+
+    @ExceptionHandler(ClienteYaExisteException.class)
+    public ResponseEntity<ErrorResponse> handleClienteYaExiste(ClienteYaExisteException ex) {
+        log.warn("Conflicto de existencia de cliente: {}", ex.getMessage());
+        ErrorResponse errorResponse = ErrorResponse.builder()
+                .codigo("409")
+                .mensaje(ex.getMessage())
+                .estado(HttpStatus.CONFLICT.value())
+                .timestamp(LocalDateTime.now())
+                .build();
+        return new ResponseEntity<>(errorResponse, HttpStatus.CONFLICT);
+    }
+
+    @ExceptionHandler(ValidacionNegocioException.class)
+    public ResponseEntity<ErrorResponse> handleValidacionNegocio(ValidacionNegocioException ex) {
+        log.warn("Falla de regla de negocio: {}", ex.getMessage());
+        ErrorResponse errorResponse = ErrorResponse.builder()
+                .codigo("400")
+                .mensaje(ex.getMessage())
+                .estado(HttpStatus.BAD_REQUEST.value())
+                .timestamp(LocalDateTime.now())
+                .build();
+        return new ResponseEntity<>(errorResponse, HttpStatus.BAD_REQUEST);
+    }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<?> handleValidationExceptions(MethodArgumentNotValidException ex) {
