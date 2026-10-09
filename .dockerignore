@@ -1,0 +1,11 @@
+.git
+.gitignore
+.idea
+.gradle
+build
+bin
+out
+*.log
+DOCUMENTACION_ENTREGABLE.md
+MANUAL_API.md
+modelo_bancario.png
