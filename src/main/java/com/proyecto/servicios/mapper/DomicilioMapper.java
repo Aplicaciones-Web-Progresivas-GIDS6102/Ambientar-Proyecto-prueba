@@ -3,13 +3,14 @@ package com.proyecto.servicios.mapper;
 import com.proyecto.servicios.dto.DomicilioDTO;
 import com.proyecto.servicios.entity.Cliente;
 import com.proyecto.servicios.entity.Domicilio;
+import com.proyecto.servicios.entity.Pais;
 
 /**
  * Mapper para convertir entre DomicilioDTO y Domicilio entity.
  */
 public class DomicilioMapper {
 
-    public static Domicilio toEntity(DomicilioDTO dto, Cliente cliente) {
+    public static Domicilio toEntity(DomicilioDTO dto, Cliente cliente, Pais pais) {
         if (dto == null) return null;
         return Domicilio.builder()
                 .id(dto.getId())
@@ -21,7 +22,7 @@ public class DomicilioMapper {
                 .municipio(dto.getMunicipio())
                 .estado(dto.getEstado())
                 .codigoPostal(dto.getCodigoPostal())
-                .pais(dto.getPais() != null ? dto.getPais() : "MÉXICO")
+                .pais(pais)
                 .build();
     }
 
@@ -36,7 +37,7 @@ public class DomicilioMapper {
                 .municipio(entity.getMunicipio())
                 .estado(entity.getEstado())
                 .codigoPostal(entity.getCodigoPostal())
-                .pais(entity.getPais())
+                .pais(entity.getPais() != null ? entity.getPais().getNombre() : "MÉXICO")
                 .build();
     }
 }

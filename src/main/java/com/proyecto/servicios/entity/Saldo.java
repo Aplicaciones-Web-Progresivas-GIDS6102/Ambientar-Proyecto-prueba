@@ -8,8 +8,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 /**
- * Entidad JPA que representa el Saldo asociado a una Cuenta Bancaria en la tabla 'saldos'.
- * Utiliza BigDecimal para garantizar la precisión decimal exacta.
+ * Entidad JPA que representa el Saldo Monetario de la cuenta en la tabla 'saldos'.
  */
 @Entity
 @Table(name = "saldos")
@@ -26,28 +25,28 @@ public class Saldo {
 
     @OneToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "cuenta_id", nullable = false, unique = true)
-    @JsonIgnoreProperties({"saldo", "cliente"})
+    @JsonIgnoreProperties("saldo")
     @ToString.Exclude
     private Cuenta cuenta;
 
     @Column(name = "saldo_disponible", nullable = false, precision = 15, scale = 2)
-    private BigDecimal saldoDisponible;
+    @Builder.Default
+    private BigDecimal saldoDisponible = BigDecimal.ZERO;
 
     @Column(name = "saldo_contable", nullable = false, precision = 15, scale = 2)
-    private BigDecimal saldoContable;
+    @Builder.Default
+    private BigDecimal saldoContable = BigDecimal.ZERO;
 
-    @Column(name = "moneda", nullable = false, length = 3)
-    private String moneda;
+    @Column(name = "moneda", nullable = false)
+    @Builder.Default
+    private String moneda = "MXN";
 
     @Column(name = "fecha_actualizacion", nullable = false)
     private LocalDateTime fechaActualizacion;
 
     @PrePersist
     @PreUpdate
-    void onSave() {
-        if (moneda == null) moneda = "MXN";
-        if (saldoDisponible == null) saldoDisponible = BigDecimal.ZERO;
-        if (saldoContable == null) saldoContable = BigDecimal.ZERO;
+    void onSaveOrUpdate() {
         fechaActualizacion = LocalDateTime.now();
     }
 }

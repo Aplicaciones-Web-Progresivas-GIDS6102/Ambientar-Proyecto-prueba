@@ -1,6 +1,5 @@
 package com.proyecto.servicios.dto;
 
-import com.proyecto.servicios.enums.Sexo;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.*;
 import lombok.AllArgsConstructor;
@@ -21,22 +20,27 @@ import java.time.LocalDate;
 public class ClienteRequestDTO {
 
     @NotBlank(message = "El primer nombre es obligatorio.")
-    @Size(max = 100, message = "El nombre no debe exceder 100 caracteres.")
+    @Size(min = 2, max = 50, message = "El nombre debe contener entre 2 y 50 caracteres.")
+    @Pattern(regexp = "^[a-zA-ZáéíóúÁÉÍÓÚñÑüÜ\\s]+$", message = "El nombre solo debe contener letras y espacios.")
     private String nombre;
 
-    @Size(max = 100, message = "El segundo nombre no debe exceder 100 caracteres.")
+    @Size(max = 50, message = "El segundo nombre no puede exceder 50 caracteres.")
+    @Pattern(regexp = "^(?:$|[a-zA-ZáéíóúÁÉÍÓÚñÑüÜ\\s]{2,50})$", message = "El segundo nombre solo debe contener letras y espacios, con entre 2 y 50 caracteres si se proporciona.")
     private String segundoNombre;
 
     @NotBlank(message = "El apellido paterno es obligatorio.")
-    @Size(max = 100, message = "El apellido paterno no debe exceder 100 caracteres.")
+    @Size(min = 2, max = 50, message = "El apellido paterno debe contener entre 2 y 50 caracteres.")
+    @Pattern(regexp = "^[a-zA-ZáéíóúÁÉÍÓÚñÑüÜ\\s]+$", message = "El apellido paterno solo debe contener letras y espacios.")
     private String apellidoPaterno;
 
     @NotBlank(message = "El apellido materno es obligatorio.")
-    @Size(max = 100, message = "El apellido materno no debe exceder 100 caracteres.")
+    @Size(min = 2, max = 50, message = "El apellido materno debe contener entre 2 y 50 caracteres.")
+    @Pattern(regexp = "^[a-zA-ZáéíóúÁÉÍÓÚñÑüÜ\\s]+$", message = "El apellido materno solo debe contener letras y espacios.")
     private String apellidoMaterno;
 
-    @NotNull(message = "La fecha de nacimiento es obligatoria.")
+    @NotNull(message = "La fecha de nacimiento es obligatoria y debe ser una fecha válida (AAAA-MM-DD).")
     @Past(message = "La fecha de nacimiento debe ser una fecha pasada.")
+    @com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = com.proyecto.servicios.config.FlexibleLocalDateDeserializer.class)
     private LocalDate fechaNacimiento;
 
     @NotBlank(message = "La CURP es obligatoria.")
@@ -45,16 +49,22 @@ public class ClienteRequestDTO {
     private String curp;
 
     @NotBlank(message = "El RFC es obligatorio.")
-    @Size(min = 12, max = 13, message = "El RFC debe contener entre 12 y 13 caracteres.")
-    @Pattern(regexp = "^[A-ZÑ&]{3,4}\\d{6}[A-Z0-9]{3}$", message = "El formato del RFC es inválido.")
+    @Pattern(
+            regexp = "^(?:$|[A-ZÑ&]{3}\\d{6}[A-Z0-9]{3}|[A-ZÑ&]{4}\\d{6}[A-Z0-9]{3})$",
+            message = "El RFC debe incluir homoclave: 12 caracteres para persona moral o 13 para persona física."
+    )
     private String rfc;
 
-    @NotNull(message = "El sexo es obligatorio.")
-    private Sexo sexo;
+    @NotBlank(message = "El sexo es obligatorio.")
+    @Pattern(regexp = "^(?i)(M|F|X|HOMBRE|MUJER|MASCULINO|FEMENINO|H|M)$", message = "El sexo es inválido. Debe ser M, F o X.")
+    private String sexo;
+
+    private Long nacionalidadId;
 
     @Builder.Default
     private String nacionalidad = "MEXICANA";
 
+    private Long estadoCivilId;
     private String estadoCivil;
 
     @NotBlank(message = "El correo electrónico es obligatorio.")
@@ -62,22 +72,36 @@ public class ClienteRequestDTO {
     @Size(max = 100, message = "El correo electrónico no puede exceder 100 caracteres.")
     private String correo;
 
-    @NotBlank(message = "El número móvil es obligatorio.")
-    @Pattern(regexp = "\\d{10}", message = "El número móvil debe contener exactamente 10 dígitos numéricos.")
+    @Pattern(regexp = "^$|^[0-9]{10,15}$", message = "El móvil solo debe contener números (entre 10 y 15 dígitos).")
     private String movil;
 
-    @Pattern(regexp = "^$|\\d{10,15}", message = "El teléfono alternativo debe ser numérico entre 10 y 15 dígitos.")
+    @Pattern(regexp = "^$|^[0-9]{10,15}$", message = "El teléfono móvil solo debe contener números (entre 10 y 15 dígitos).")
+    private String telefonoMovil;
+
+    @Pattern(regexp = "^$|^[0-9]{10,15}$", message = "El teléfono alternativo solo debe contener números (entre 10 y 15 dígitos).")
     private String telefonoAlternativo;
 
+    // Campos de información laboral (flat o nested)
     private String ocupacion;
-
     private String empresa;
-
-    @NotNull(message = "El ingreso mensual es obligatorio.")
-    @DecimalMin(value = "0.01", message = "El ingreso mensual debe ser mayor que cero.")
     private BigDecimal ingresoMensual;
+
+    @Valid
+    private InformacionLaboralDTO informacionLaboral;
 
     @NotNull(message = "Los datos del domicilio son obligatorios.")
     @Valid
     private DomicilioDTO domicilio;
+
+    // Campos opcionales para credenciales de onboarding si aplican
+    @Size(min = 4, max = 50, message = "El nombre de usuario debe tener entre 4 y 50 caracteres.")
+    private String username;
+
+    @Size(min = 6, max = 100, message = "La contraseña debe tener al menos 6 caracteres.")
+    private String password;
+
+    public String getTelefonoMovilFinal() {
+        if (telefonoMovil != null && !telefonoMovil.isBlank()) return telefonoMovil;
+        return movil;
+    }
 }

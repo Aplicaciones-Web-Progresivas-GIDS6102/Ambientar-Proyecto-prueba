@@ -3,15 +3,9 @@ package com.proyecto.servicios.service;
 import com.proyecto.servicios.dto.ClienteRequestDTO;
 import com.proyecto.servicios.dto.ClienteResponseDTO;
 import com.proyecto.servicios.dto.DomicilioDTO;
-import com.proyecto.servicios.entity.Cliente;
-import com.proyecto.servicios.entity.Cuenta;
-import com.proyecto.servicios.entity.Domicilio;
-import com.proyecto.servicios.entity.Saldo;
-import com.proyecto.servicios.enums.EstadoCuenta;
-import com.proyecto.servicios.enums.Sexo;
+import com.proyecto.servicios.entity.*;
 import com.proyecto.servicios.exception.*;
-import com.proyecto.servicios.repositorys.ClienteRepository;
-import com.proyecto.servicios.repositorys.CuentaRepository;
+import com.proyecto.servicios.repositorys.*;
 import com.proyecto.servicios.service.Impl.ClienteServiceImpl;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -43,6 +37,15 @@ class ClienteServiceImplTest {
     private CuentaRepository cuentaRepository;
 
     @Mock
+    private PaisRepository paisRepository;
+
+    @Mock
+    private EstadoCivilRepository estadoCivilRepository;
+
+    @Mock
+    private EstatusCuentaRepository estatusCuentaRepository;
+
+    @Mock
     private CuentaService cuentaService;
 
     @InjectMocks
@@ -52,9 +55,16 @@ class ClienteServiceImplTest {
     private Cliente clienteMock;
     private Domicilio domicilioMock;
     private Cuenta cuentaMock;
+    private Pais paisMock;
+    private EstadoCivil estadoCivilMock;
+    private EstatusCuenta estatusCuentaMock;
 
     @BeforeEach
     void setUp() {
+        paisMock = Pais.builder().id(1L).nombre("MÉXICO").codigoIso("MEX").activo(true).build();
+        estadoCivilMock = EstadoCivil.builder().id(1L).descripcion("SOLTERO").activo(true).build();
+        estatusCuentaMock = EstatusCuenta.builder().id(1L).nombre("ACTIVA").descripcion("Cuenta Activa").activo(true).build();
+
         DomicilioDTO domicilioDTO = DomicilioDTO.builder()
                 .calle("AV. REFORMA")
                 .numeroExterior("123")
@@ -72,7 +82,7 @@ class ClienteServiceImplTest {
                 .fechaNacimiento(LocalDate.of(1990, 5, 15))
                 .curp("HERC900515HMCRGR01")
                 .rfc("HERC900515XX1")
-                .sexo(Sexo.M)
+                .sexo("M")
                 .correo("carlos.hernandez@email.com")
                 .movil("5512345678")
                 .ingresoMensual(new BigDecimal("25000.00"))
@@ -87,7 +97,7 @@ class ClienteServiceImplTest {
                 .municipio("CUAUHTEMOC")
                 .estado("CDMX")
                 .codigoPostal("06000")
-                .pais("MÉXICO")
+                .pais(paisMock)
                 .build();
 
         clienteMock = Cliente.builder()
@@ -98,13 +108,12 @@ class ClienteServiceImplTest {
                 .fechaNacimiento(LocalDate.of(1990, 5, 15))
                 .curp("HERC900515HMCRGR01")
                 .rfc("HERC900515XX1")
-                .sexo(Sexo.M)
-                .nacionalidad("MEXICANA")
+                .sexo("M")
+                .nacionalidad(paisMock)
+                .estadoCivil(estadoCivilMock)
                 .correo("carlos.hernandez@email.com")
-                .movil("5512345678")
-                .ingresoMensual(new BigDecimal("25000.00"))
+                .telefonoMovil("5512345678")
                 .activo(true)
-                .eliminado(false)
                 .fechaCreacion(LocalDateTime.now())
                 .fechaActualizacion(LocalDateTime.now())
                 .domicilio(domicilioMock)
@@ -116,10 +125,7 @@ class ClienteServiceImplTest {
                 .id(100L)
                 .cliente(clienteMock)
                 .numeroCuenta("4000123456")
-                .clabe("012180400012345601")
-                .tipoCuenta("DEBITO")
-                .estado(EstadoCuenta.ACTIVA)
-                .activo(true)
+                .estatusCuenta(estatusCuentaMock)
                 .saldo(Saldo.builder().saldoDisponible(BigDecimal.ZERO).saldoContable(BigDecimal.ZERO).moneda("MXN").build())
                 .build();
     }
@@ -130,6 +136,8 @@ class ClienteServiceImplTest {
         when(clienteRepository.existsByCurp(anyString())).thenReturn(false);
         when(clienteRepository.existsByRfc(anyString())).thenReturn(false);
         when(clienteRepository.existsByCorreo(anyString())).thenReturn(false);
+        when(paisRepository.findByNombreIgnoreCase(anyString())).thenReturn(Optional.of(paisMock));
+        when(estadoCivilRepository.findByDescripcionIgnoreCase(anyString())).thenReturn(Optional.of(estadoCivilMock));
         when(clienteRepository.save(any(Cliente.class))).thenReturn(clienteMock);
         when(cuentaService.crearCuentaParaCliente(any(Cliente.class))).thenReturn(cuentaMock);
 
@@ -140,7 +148,6 @@ class ClienteServiceImplTest {
         assertEquals("HERC900515HMCRGR01", response.getCurp());
         assertEquals("HERC900515XX1", response.getRfc());
         assertTrue(response.getActivo());
-        assertFalse(response.getEliminado());
 
         verify(clienteRepository, times(1)).save(any(Cliente.class));
         verify(cuentaService, times(1)).crearCuentaParaCliente(any(Cliente.class));
@@ -221,15 +228,14 @@ class ClienteServiceImplTest {
     void eliminarCliente_BajaLogica_Exitoso() {
         when(clienteRepository.findById(10L)).thenReturn(Optional.of(clienteMock));
         when(cuentaRepository.findByClienteId(10L)).thenReturn(List.of(cuentaMock));
+        when(estatusCuentaRepository.findByNombreIgnoreCase("INACTIVA")).thenReturn(Optional.of(EstatusCuenta.builder().nombre("INACTIVA").build()));
 
         clienteService.eliminarCliente(10L);
 
         assertFalse(clienteMock.getActivo());
-        assertTrue(clienteMock.getEliminado());
         assertNotNull(clienteMock.getFechaBaja());
 
-        assertFalse(cuentaMock.getActivo());
-        assertEquals(EstadoCuenta.INACTIVA, cuentaMock.getEstado());
+        assertEquals("INACTIVA", cuentaMock.getEstatusCuenta().getNombre());
 
         verify(clienteRepository, times(1)).save(clienteMock);
         verify(cuentaRepository, times(1)).save(cuentaMock);
@@ -264,6 +270,8 @@ class ClienteServiceImplTest {
         when(clienteRepository.existsByCurp(anyString())).thenReturn(false);
         when(clienteRepository.existsByRfc(anyString())).thenReturn(false);
         when(clienteRepository.existsByCorreo(anyString())).thenReturn(false);
+        when(paisRepository.findByNombreIgnoreCase(anyString())).thenReturn(Optional.of(paisMock));
+        when(estadoCivilRepository.findByDescripcionIgnoreCase(anyString())).thenReturn(Optional.of(estadoCivilMock));
         when(clienteRepository.save(any(Cliente.class))).thenReturn(clienteMock);
         when(cuentaService.crearCuentaParaCliente(any(Cliente.class)))
                 .thenThrow(new RuntimeException("Fallo en base de datos al crear saldo"));

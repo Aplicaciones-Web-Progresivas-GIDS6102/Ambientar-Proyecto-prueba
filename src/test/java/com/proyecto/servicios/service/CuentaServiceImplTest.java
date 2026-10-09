@@ -4,17 +4,17 @@ import com.proyecto.servicios.dto.CuentaResponseDTO;
 import com.proyecto.servicios.dto.SaldoDTO;
 import com.proyecto.servicios.entity.Cliente;
 import com.proyecto.servicios.entity.Cuenta;
+import com.proyecto.servicios.entity.EstatusCuenta;
 import com.proyecto.servicios.entity.Saldo;
-import com.proyecto.servicios.enums.EstadoCuenta;
 import com.proyecto.servicios.exception.CuentaNoEncontradaException;
 import com.proyecto.servicios.repositorys.CuentaRepository;
+import com.proyecto.servicios.repositorys.EstatusCuentaRepository;
 import com.proyecto.servicios.repositorys.SaldoRepository;
 import com.proyecto.servicios.service.Impl.CuentaServiceImpl;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -37,15 +37,21 @@ class CuentaServiceImplTest {
     @Mock
     private SaldoRepository saldoRepository;
 
+    @Mock
+    private EstatusCuentaRepository estatusCuentaRepository;
+
     @InjectMocks
     private CuentaServiceImpl cuentaService;
 
     private Cliente clienteMock;
     private Cuenta cuentaMock;
     private Saldo saldoMock;
+    private EstatusCuenta estatusCuentaMock;
 
     @BeforeEach
     void setUp() {
+        estatusCuentaMock = EstatusCuenta.builder().id(1L).nombre("ACTIVA").descripcion("Cuenta Activa").activo(true).build();
+
         clienteMock = Cliente.builder()
                 .id(1L)
                 .nombre("JUAN")
@@ -64,29 +70,24 @@ class CuentaServiceImplTest {
                 .id(100L)
                 .cliente(clienteMock)
                 .numeroCuenta("4000123456")
-                .clabe("012180400012345601")
-                .tipoCuenta("DEBITO")
-                .estado(EstadoCuenta.ACTIVA)
-                .activo(true)
+                .estatusCuenta(estatusCuentaMock)
                 .saldo(saldoMock)
                 .build();
         saldoMock.setCuenta(cuentaMock);
     }
 
     @Test
-    @DisplayName("Debe crear automáticamente una cuenta con estado ACTIVA y saldo inicial en cero")
+    @DisplayName("Debe crear automáticamente una cuenta con estatus ACTIVA y saldo inicial en cero")
     void crearCuentaParaCliente_Exitoso() {
         when(cuentaRepository.existsByNumeroCuenta(anyString())).thenReturn(false);
-        when(cuentaRepository.existsByClabe(anyString())).thenReturn(false);
+        when(estatusCuentaRepository.findByNombreIgnoreCase("ACTIVA")).thenReturn(Optional.of(estatusCuentaMock));
         when(cuentaRepository.save(any(Cuenta.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         Cuenta cuentaCreada = cuentaService.crearCuentaParaCliente(clienteMock);
 
         assertNotNull(cuentaCreada);
         assertEquals(clienteMock, cuentaCreada.getCliente());
-        assertEquals(EstadoCuenta.ACTIVA, cuentaCreada.getEstado());
-        assertTrue(cuentaCreada.getActivo());
-        assertEquals("DEBITO", cuentaCreada.getTipoCuenta());
+        assertEquals("ACTIVA", cuentaCreada.getEstatusCuenta().getNombre());
         assertNotNull(cuentaCreada.getSaldo());
         assertEquals(0, BigDecimal.ZERO.compareTo(cuentaCreada.getSaldo().getSaldoDisponible()));
         assertEquals(0, BigDecimal.ZERO.compareTo(cuentaCreada.getSaldo().getSaldoContable()));
@@ -104,8 +105,7 @@ class CuentaServiceImplTest {
 
         assertNotNull(response);
         assertEquals("4000123456", response.getNumeroCuenta());
-        assertEquals("012180400012345601", response.getClabe());
-        assertEquals(EstadoCuenta.ACTIVA, response.getEstado());
+        assertEquals("ACTIVA", response.getEstatusCuenta().getNombre());
     }
 
     @Test
@@ -133,12 +133,12 @@ class CuentaServiceImplTest {
     @Test
     @DisplayName("Debe obtener las cuentas activas")
     void obtenerCuentasActivas_Exitoso() {
-        when(cuentaRepository.findByActivoTrue()).thenReturn(List.of(cuentaMock));
+        when(cuentaRepository.findByEstatusCuentaActivoTrue()).thenReturn(List.of(cuentaMock));
 
         List<CuentaResponseDTO> resultado = cuentaService.obtenerCuentasActivas();
 
         assertNotNull(resultado);
         assertEquals(1, resultado.size());
-        assertTrue(resultado.get(0).getActivo());
+        assertEquals("ACTIVA", resultado.get(0).getEstatusCuenta().getNombre());
     }
 }

@@ -110,11 +110,93 @@ BUILD SUCCESSFUL in 19s
 
 ---
 
-## 6. Guía de Pruebas en Postman
+## 6. API de Personas y Clientes
 
-Para validar la solución en un entorno local:
+La documentación interactiva de Swagger UI se consulta en [http://localhost:8080/swagger-ui/index.html#/](http://localhost:8080/swagger-ui/index.html#/). La configuración actual del proyecto establece `server.port=8080`. Swagger genera los esquemas de los cuerpos a partir de los DTOs y modelos de cada operación.
 
-1. **Endpoint**: `POST http://localhost:8090/api/v1/gestopago/productos`
+### Personas
+
+Las operaciones existentes reciben y devuelven JSON:
+
+| Método | URL | Descripción |
+| :--- | :--- | :--- |
+| `POST` | `/personas` | Registra una persona. |
+| `PUT` | `/personasActualiza` | Actualiza apellidos buscando por nombre. |
+| `PUT` | `/personasElimina` | Elimina una persona buscando por nombre. |
+
+Ejemplo de cuerpo para crear o actualizar (`PersonasRequest`):
+```json
+{
+  "nombre": "Ana",
+  "apellidoP": "García",
+  "apellidoMaterno": "López"
+}
+```
+
+Ejemplo de cuerpo para eliminar (`EliminaPersonaRequest`):
+```json
+{
+  "nombre": "Ana"
+}
+```
+
+### Clientes
+
+Los endpoints nuevos se publican bajo `/api/v1/clientes`. Crear y actualizar reciben el objeto `ClienteRequestDTO` completo; consultar y buscar no requieren cuerpo.
+
+| Método | URL | Descripción |
+| :--- | :--- | :--- |
+| `POST` | `/api/v1/clientes` | Registra un cliente y crea su cuenta automáticamente. Responde `201 Created`. |
+| `GET` | `/api/v1/clientes` | Lista los clientes activos. |
+| `GET` | `/api/v1/clientes/{id}` | Consulta un cliente por ID. |
+| `PUT` | `/api/v1/clientes/{id}` | Actualiza los datos del cliente. |
+| `DELETE` | `/api/v1/clientes/{id}` | Da de baja lógicamente al cliente y desactiva sus cuentas. Responde `204 No Content`. |
+| `GET` | `/api/v1/clientes/busquedas/curp/{curp}` | Busca por CURP. |
+| `GET` | `/api/v1/clientes/busquedas/rfc/{rfc}` | Busca por RFC. |
+| `GET` | `/api/v1/clientes/busquedas/correo?correo={correo}` | Busca por correo electrónico. |
+| `GET` | `/api/v1/clientes/busquedas/fecha-creacion?fechaInicio={fechaInicio}&fechaFin={fechaFin}` | Filtra por rango ISO 8601, por ejemplo `2026-01-01T00:00:00`. |
+
+Ejemplo de cuerpo para registrar o actualizar un cliente:
+```json
+{
+  "nombre": "María",
+  "segundoNombre": "Elena",
+  "apellidoPaterno": "García",
+  "apellidoMaterno": "López",
+  "fechaNacimiento": "1990-01-15",
+  "curp": "GODE900115MDFRRL09",
+  "rfc": "GODE9001151A2",
+  "sexo": "F",
+  "nacionalidad": "MEXICANA",
+  "estadoCivil": "SOLTERA",
+  "correo": "maria.garcia@example.com",
+  "movil": "5512345678",
+  "telefonoAlternativo": "5555551234",
+  "ocupacion": "Ingeniera",
+  "empresa": "Empresa de ejemplo",
+  "ingresoMensual": 25000.00,
+  "domicilio": {
+    "calle": "Av. Insurgentes",
+    "numeroExterior": "123",
+    "numeroInterior": "4B",
+    "colonia": "Del Valle",
+    "municipio": "Benito Juárez",
+    "estado": "Ciudad de México",
+    "codigoPostal": "03100",
+    "pais": "MÉXICO"
+  }
+}
+```
+
+El cuerpo debe cumplir las validaciones declaradas en `ClienteRequestDTO` y `DomicilioDTO`, incluyendo fecha de nacimiento pasada, CURP de 18 caracteres, RFC de 12 o 13 caracteres, móvil de 10 dígitos e ingreso mensual mayor que cero.
+
+## 7. Guía de Pruebas en Postman
+
+Para probar todos los controladores, importa el archivo `Ambientar-Proyecto.postman_collection.json` en Postman (**Import > File**). La colección usa `http://localhost:8080` como `baseUrl`. Ejecuta primero **Crear cliente**, después **Registrar usuario para cliente** y **Iniciar sesión**; este último guarda el JWT automáticamente para las solicitudes protegidas. Cambia CURP, RFC, correo y username del ejemplo si ya están registrados. El endpoint de baja lógica elimina el cliente de las consultas activas, por lo que conviene ejecutarlo al final.
+
+Para validar GestoPago manualmente en un entorno local:
+
+1. **Endpoint**: `POST http://localhost:8080/api/v1/gestopago/productos`
 2. **Encabezados**: `Content-Type: application/json`
 3. **Cuerpo de la Petición Exitosas (JSON)**:
    ```json

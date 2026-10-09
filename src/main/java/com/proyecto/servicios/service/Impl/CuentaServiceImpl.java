@@ -4,12 +4,13 @@ import com.proyecto.servicios.dto.CuentaResponseDTO;
 import com.proyecto.servicios.dto.SaldoDTO;
 import com.proyecto.servicios.entity.Cliente;
 import com.proyecto.servicios.entity.Cuenta;
+import com.proyecto.servicios.entity.EstatusCuenta;
 import com.proyecto.servicios.entity.Saldo;
-import com.proyecto.servicios.enums.EstadoCuenta;
 import com.proyecto.servicios.exception.CuentaNoEncontradaException;
 import com.proyecto.servicios.mapper.CuentaMapper;
 import com.proyecto.servicios.mapper.SaldoMapper;
 import com.proyecto.servicios.repositorys.CuentaRepository;
+import com.proyecto.servicios.repositorys.EstatusCuentaRepository;
 import com.proyecto.servicios.repositorys.SaldoRepository;
 import com.proyecto.servicios.service.CuentaService;
 import lombok.RequiredArgsConstructor;
@@ -24,7 +25,7 @@ import java.util.stream.Collectors;
 
 /**
  * Implementación del servicio de Cuentas Bancarias.
- * Gestiona la creación de cuentas automáticas, generación de número de cuenta y CLABE,
+ * Gestiona la creación de cuentas automáticas, generación de número de cuenta y estatus,
  * así como consultas de saldos y cuentas activas.
  */
 @Service
@@ -34,6 +35,7 @@ public class CuentaServiceImpl implements CuentaService {
 
     private final CuentaRepository cuentaRepository;
     private final SaldoRepository saldoRepository;
+    private final EstatusCuentaRepository estatusCuentaRepository;
 
     private static final String BANCO_PREFIX = "4000";
     private final Random random = new Random();
@@ -67,7 +69,7 @@ public class CuentaServiceImpl implements CuentaService {
     @Override
     @Transactional(readOnly = true)
     public List<CuentaResponseDTO> obtenerCuentasActivas() {
-        return cuentaRepository.findByActivoTrue().stream()
+        return cuentaRepository.findByEstatusCuentaActivoTrue().stream()
                 .map(CuentaMapper::toDTO)
                 .collect(Collectors.toList());
     }
@@ -78,15 +80,18 @@ public class CuentaServiceImpl implements CuentaService {
         log.info("Generando cuenta bancaria automática para el cliente ID={}", cliente.getId());
 
         String numeroCuenta = generarNumeroCuentaUnico();
-        String clabe = generarClabeUnica(numeroCuenta);
+
+        EstatusCuenta estatusActiva = estatusCuentaRepository.findByNombreIgnoreCase("ACTIVA")
+                .orElseGet(() -> estatusCuentaRepository.save(EstatusCuenta.builder()
+                        .nombre("ACTIVA")
+                        .descripcion("Cuenta Activa")
+                        .activo(true)
+                        .build()));
 
         Cuenta cuenta = Cuenta.builder()
                 .cliente(cliente)
                 .numeroCuenta(numeroCuenta)
-                .clabe(clabe)
-                .tipoCuenta("DEBITO")
-                .estado(EstadoCuenta.ACTIVA)
-                .activo(true)
+                .estatusCuenta(estatusActiva)
                 .build();
 
         Saldo saldoInicial = Saldo.builder()
@@ -99,7 +104,7 @@ public class CuentaServiceImpl implements CuentaService {
         cuenta.setSaldo(saldoInicial);
         Cuenta cuentaGuardada = cuentaRepository.save(cuenta);
 
-        log.info("Cuenta bancaria N° {} creada exitosamente con CLABE {}", numeroCuenta, clabe);
+        log.info("Cuenta bancaria N° {} creada exitosamente", numeroCuenta);
         return cuentaGuardada;
     }
 
@@ -115,17 +120,5 @@ public class CuentaServiceImpl implements CuentaService {
             }
         } while (cuentaRepository.existsByNumeroCuenta(numeroCuenta));
         return numeroCuenta;
-    }
-
-    private String generarClabeUnica(String numeroCuenta) {
-        // Estructura CLABE 18 dígitos: 012 (Banco) + 180 (Plaza) + 10 dígitos (Cuenta) + 2 dígitos control
-        String clabeBase = "012180" + numeroCuenta;
-        String clabe = clabeBase + "01";
-        int intentos = 0;
-        while (cuentaRepository.existsByClabe(clabe)) {
-            intentos++;
-            clabe = clabeBase + String.format("%02d", intentos % 100);
-        }
-        return clabe;
     }
 }
