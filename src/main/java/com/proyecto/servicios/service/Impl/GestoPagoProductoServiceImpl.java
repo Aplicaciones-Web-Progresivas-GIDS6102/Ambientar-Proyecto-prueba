@@ -21,27 +21,22 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
+import java.util.function.Predicate;
+import java.util.stream.Collectors;
 
 /**
  * Implementación de la capa de servicio para consultar y sincronizar productos de GestoPago.
  * 
  * ¿QUÉ HACE ESTE SERVICIO?
- * Maneja la estrategia de caché en Redis, sincronización con el proveedor externo GestoPago,
- * actualización limpia de la base de datos PostgreSQL en respuestas HTTP 200 y respaldo en modo offline cuando no hay Internet.
- * 
- * ¿CÓMO LO HACE?
- * 1. CACHÉ EN REDIS: Al consultar productos, revisa primero la clave 'gestopago:productos:catalogo' en Redis para rápida respuesta.
- * 2. RESPUESTA HTTP 200 DEL PROVEEDOR: Invocado por el Cron (6:00 AM) o por falta de caché, llama al cliente Feign.
- *    Si la respuesta es exitosa (HTTP 200):
- *    a) Ejecuta `gestoPagoProductoRepository.deleteAllInBatch()` para ELIMINAR los productos anteriores en la BD PostgreSQL (evitando duplicados).
- *    b) Convierte los datos y guarda la nueva lista mediante `saveAll()`.
- *    c) Guarda la respuesta en Redis con un tiempo de vida (TTL) de 24 horas.
- * 3. MODO OFFLINE / CAÍDA DE RED (SIN INTERNET): Si la llamada externa falla (FeignException, Timeout, etc.):
- *    a) No elimina nada de la BD.
- *    b) Consulta los registros previamente almacenados en PostgreSQL (`findAll()`).
- *    c) Devuelve la lista recuperada de la BD indicando en el mensaje que se sirve desde el respaldo offline.
+ * 1. CACHÉ EN REDIS: Almacena y recupera el catálogo de productos con la clave 'gestopago:productos:catalogo'.
+ * 2. BORRADO CONDICIONAL EN BD (HTTP 200): Solo cuando el proveedor responde exitosamente (HTTP 200 OK),
+ *    elimina los productos anteriores en PostgreSQL (`deleteAllInBatch()`) para evitar duplicados e inserta la nueva lista.
+ * 3. RESPALDO OFFLINE: Si la llamada externa falla (sin Internet), recupera los datos almacenados en PostgreSQL.
+ * 4. ORDENAMIENTO POR STREAM Y PREDICATE: Ordena los productos de menor a mayor según el atributo 'tipoFront' (0, 1, 2, ...).
+ *    Si un producto no incluye 'tipoFront', se le asigna por defecto "0" y se coloca AL INICIO del resultado.
  */
 @Service
 @Slf4j
@@ -63,12 +58,6 @@ public class GestoPagoProductoServiceImpl implements GestoPagoProductoService {
     @Value("${gestopago.auth.codigo-dispositivo:DEV_DEVICE_01}")
     private String codigoDispositivo;
 
-    /**
-     * Inyección de dependencias por constructor.
-     * 
-     * ¿QUÉ HACE? Garantiza la inmutabilidad y facilita las pruebas unitarias del servicio.
-     * ¿CÓMO LO HACE? Spring inyecta automáticamente las instancias del cliente Feign, repositorio, token service y RedisTemplate.
-     */
     public GestoPagoProductoServiceImpl(GestoPagoProductClient gestoPagoProductClient,
                                         GestoPagoTokenService gestoPagoTokenService,
                                         GestoPagoProductoRepository gestoPagoProductoRepository,
@@ -80,57 +69,34 @@ public class GestoPagoProductoServiceImpl implements GestoPagoProductoService {
     }
 
     /**
-     * Consulta la lista de productos de GestoPago.
-     * 
-     * ¿QUÉ HACE?
-     * Retorna los productos de forma rápida. Intenta leer desde Redis; si no existen en memoria,
-     * ejecuta la sincronización con el servicio externo o base de datos.
-     * 
-     * ¿CÓMO LO HACE?
-     * Revisa si existe el catálogo en Redis mediante `redisTemplate.opsForValue().get(...)`.
-     * - Si existe: Devuelve el objeto deserializado de Redis (Cache Hit).
-     * - Si no existe (Cache Miss): Ejecuta `sincronizarProductos()`.
+     * Consulta los productos. Primero revisa Redis Caché; si no está en caché, sincroniza.
      */
     @Override
     public ConsultaProductosResponse obtenerProductos(ConsultaProductosRequest request) {
         log.info("Iniciando consulta de productos GestoPago...");
 
         try {
-            // 1. Intentar obtener desde la memoria caché Redis
             Object cachedData = redisTemplate.opsForValue().get(REDIS_CACHE_KEY);
             if (cachedData instanceof ConsultaProductosResponse responseCache) {
-                log.info("Catálogo de productos recuperado exitosamente desde CACHÉ REDIS (Cache Hit). Total productos: {}",
+                log.info("Catálogo de productos recuperado desde CACHÉ REDIS (Cache Hit). Total productos: {}",
                         responseCache.getProductos() != null ? responseCache.getProductos().size() : 0);
                 return responseCache;
             }
         } catch (Exception e) {
-            log.warn("No se pudo consultar Redis Caché (servidor Redis inalcanzable o no configurado): {}. Procediendo a consulta directa.", e.getMessage());
+            log.warn("No se pudo consultar Redis Caché: {}. Procediendo a consulta directa.", e.getMessage());
         }
 
-        // 2. Si no estaba en caché o Redis falló, sincronizar y obtener productos
         return sincronizarProductos();
     }
 
     /**
-     * Sincroniza la lista de productos desde el proveedor externo y gestiona el almacenamiento en Redis y BD.
-     * 
-     * ¿QUÉ HACE?
-     * Consume el servicio web externo de GestoPago. Si responde HTTP 200, limpia la BD PostgreSQL y guarda los nuevos datos,
-     * actualizando también la caché en Redis. Si la conexión falla (sin Internet), recurre a los datos de la BD.
-     * 
-     * ¿CÓMO LO HACE?
-     * 1. Resuelve el Bearer Token activo y llama a Feign `getProductList`.
-     * 2. Si responde OK (HTTP 200):
-     *    - Aplica `@Transactional` para ejecutar `gestoPagoProductoRepository.deleteAllInBatch()`, eliminando los productos viejos.
-     *    - Mapea los datos a entidades y ejecuta `saveAll()` en PostgreSQL.
-     *    - Guarda la respuesta en Redis con TTL de 24 horas (`Duration.ofHours(24)`).
-     * 3. Si ocurre una excepción (Caída de red, FeignException):
-     *    - Captura el error y llama a `recuperarDesdeBaseDeDatosOffline()`.
+     * Sincroniza productos desde la API externa, borra anteriores en BD en HTTP 200 OK,
+     * ordena los productos por 'tipoFront' (de menor a mayor, por defecto 0) usando Streams y guarda en Redis/BD.
      */
     @Override
     @Transactional
     public ConsultaProductosResponse sincronizarProductos() {
-        log.info("Iniciando proceso de sincronización con el proveedor externo GestoPago...");
+        log.info("Iniciando proceso de sincronización de productos GestoPago...");
 
         String rawToken = resolverBearerToken();
         String authorizationHeader = formatearBearerHeader(rawToken);
@@ -138,17 +104,19 @@ public class GestoPagoProductoServiceImpl implements GestoPagoProductoService {
         log.info("Consumiendo getProductList.do con token enmascarado: {}", enmascararToken(rawToken));
 
         try {
-            // Invocación Feign al endpoint externo
             GestoPagoProductXmlResponse xmlResponse = gestoPagoProductClient.getProductList(authorizationHeader);
 
             if (xmlResponse == null) {
-                log.warn("El proveedor GestoPago devolvió una respuesta nula. Intentando respaldo en BD.");
+                log.warn("El proveedor GestoPago devolvió una respuesta nula. Recurriendo a respaldo en BD.");
                 return recuperarDesdeBaseDeDatosOffline("Proveedor devolvió respuesta nula.");
             }
 
+            // 1. Mapear productos del XML
             List<ProductoDto> dtoList = mapearProductosDto(xmlResponse);
 
-            // Determinar código y mensaje del proveedor
+            // 2. ORDENAR PRODUCTOS POR TIPO FRONT DE MENOR A MAYOR USANDO STREAMS (SIN TIPO FRONT -> DEFAULT "0" AL INICIO)
+            dtoList = ordenarProductosPorTipoFront(dtoList);
+
             String codigoNegocio = "01";
             String mensajeNegocio = "Operacion realizada con exito";
             if (xmlResponse.getMensaje() != null) {
@@ -166,47 +134,87 @@ public class GestoPagoProductoServiceImpl implements GestoPagoProductoService {
                     .productos(dtoList)
                     .build();
 
-            // CONDICIÓN PRINCIPAL: Solo si responde con código exitoso ("01" / HTTP 200 OK)
+            // CONDICIÓN: Si responde HTTP 200 OK (Código "01"), borrar anteriores en BD y guardar la nueva lista ordenada
             if ("01".equals(codigoNegocio)) {
-                log.info("Respuesta HTTP 200 exitosa del proveedor. Procediendo a eliminar registros anteriores en BD para evitar duplicados...");
+                log.info("Respuesta HTTP 200 OK exitosa del proveedor. Eliminando registros anteriores en BD para evitar duplicados...");
 
-                // a) ELIMINAR REGISTROS ANTERIORES EN POSTGRESQL (Solo en HTTP 200 exitoso)
                 gestoPagoProductoRepository.deleteAllInBatch();
-                log.info("Registros anteriores eliminados correctamente de la base de datos.");
+                log.info("Registros anteriores eliminados de la base de datos.");
 
-                // b) GUARDAR NUEVOS PRODUCTOS EN POSTGRESQL (Respaldo offline)
                 List<GestoPagoProducto> entidadesParaGuardar = mapearEntidadesBd(dtoList);
                 if (!entidadesParaGuardar.isEmpty()) {
                     gestoPagoProductoRepository.saveAll(entidadesParaGuardar);
-                    log.info("Se guardaron {} nuevos productos en PostgreSQL para soporte offline.", entidadesParaGuardar.size());
+                    log.info("Se guardaron {} productos ordenados por tipoFront en PostgreSQL.", entidadesParaGuardar.size());
                 }
 
-                // c) GUARDAR / ACTUALIZAR EN REDIS CACHÉ CON TTL DE 24 HORAS
                 guardarEnRedis(responseSuccess);
             }
 
             return responseSuccess;
 
         } catch (FeignException e) {
-            log.error("Error de comunicación HTTP con GestoPago (Status: {}): {}. Recurriendo a respaldo de BD...",
-                    e.status(), e.getMessage());
+            log.error("Error de comunicación HTTP con GestoPago (Status: {}): {}. Recurriendo a respaldo de BD...", e.status(), e.getMessage());
             return recuperarDesdeBaseDeDatosOffline("Error de red/comunicación con el proveedor externo.");
 
         } catch (Exception e) {
-            log.error("Excepción inesperada durante la sincronización: {}. Recurriendo a respaldo de BD...", e.getMessage(), e);
+            log.error("Excepción inesperada en la sincronización: {}. Recurriendo a respaldo de BD...", e.getMessage(), e);
             return recuperarDesdeBaseDeDatosOffline("Falla inesperada en la sincronización.");
         }
     }
 
     /**
-     * Recupera los productos respaldados en la base de datos PostgreSQL cuando el servicio externo está caído (sin Internet).
+     * Ordena la lista de productos por el atributo 'tipoFront' de menor a mayor utilizando Java Streams, Predicates y Comparators.
      * 
      * ¿QUÉ HACE?
-     * Actúa como mecanismo de tolerancia a fallos (Fallback Mode Offline).
+     * Revisa cada producto. Si no contiene 'tipoFront' (es nulo o vacío), asigna por defecto "0"
+     * y posiciona esos productos al INICIO del resultado (orden ascendente: 0, 1, 2, ...).
      * 
      * ¿CÓMO LO HACE?
-     * Consulta `gestoPagoProductoRepository.findAll()`. Si existen productos guardados previamente, los convierte a DTOs
-     * y los retorna al cliente con un mensaje informativo de operación en modo offline.
+     * 1. Define un Predicate para detectar elementos sin tipoFront.
+     * 2. Usa `stream().map(...)` para normalizar los valores faltantes a "0".
+     * 3. Usa `sorted(Comparator.comparingInt(...))` para realizar el ordenamiento numérico de menor a mayor.
+     * 4. Retorna la lista ordenada mediante `collect(Collectors.toList())`.
+     */
+    private List<ProductoDto> ordenarProductosPorTipoFront(List<ProductoDto> lista) {
+        if (lista == null || lista.isEmpty()) {
+            return new ArrayList<>();
+        }
+
+        // Predicado funcional para identificar elementos que carecen del atributo tipoFront
+        Predicate<ProductoDto> sinTipoFront = dto -> dto.getTipoFront() == null || dto.getTipoFront().isBlank();
+
+        return lista.stream()
+                .map(dto -> {
+                    // Si no se tiene dato en el atributo tipoFront, se toma como "0"
+                    if (sinTipoFront.test(dto)) {
+                        dto.setTipoFront("0");
+                    } else {
+                        dto.setTipoFront(dto.getTipoFront().trim());
+                    }
+                    return dto;
+                })
+                // Ordenamiento numérico ascendente (de menor a mayor): 0 -> 1 -> 2 ...
+                .sorted(Comparator.comparingInt(this::convertirTipoFrontAEntero))
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Convierte la cadena 'tipoFront' a su equivalente entero para la comparación del Stream.
+     * Retorna 0 si es nulo, en blanco o no numérico.
+     */
+    private int convertirTipoFrontAEntero(ProductoDto dto) {
+        if (dto == null || dto.getTipoFront() == null || dto.getTipoFront().isBlank()) {
+            return 0;
+        }
+        try {
+            return Integer.parseInt(dto.getTipoFront().trim());
+        } catch (NumberFormatException e) {
+            return 0; // Si no es numérico, se ubica al inicio junto con los "0"
+        }
+    }
+
+    /**
+     * Modo Offline: Recupera productos de PostgreSQL y los retorna ordenados por 'tipoFront'.
      */
     private ConsultaProductosResponse recuperarDesdeBaseDeDatosOffline(String causaFalla) {
         log.info("EJECUTANDO MODO OFFLINE: Consultando productos almacenados en la Base de Datos PostgreSQL...");
@@ -231,7 +239,7 @@ public class GestoPagoProductoServiceImpl implements GestoPagoProductoService {
                         .idServicio(entity.getIdServicio() != null ? entity.getIdServicio() : "")
                         .idProducto(entity.getIdProducto() != null ? entity.getIdProducto() : "")
                         .idCatTipoServicio(entity.getIdCatTipoServicio() != null ? entity.getIdCatTipoServicio() : "")
-                        .tipoFront(entity.getTipoFront() != null ? entity.getTipoFront() : "")
+                        .tipoFront(entity.getTipoFront() != null ? entity.getTipoFront() : "0")
                         .hasDigitoVerificador(entity.getHasDigitoVerificador() != null && entity.getHasDigitoVerificador())
                         .precio(entity.getPrecio() != null ? entity.getPrecio() : 0.0)
                         .showAyuda(entity.getShowAyuda() != null && entity.getShowAyuda())
@@ -240,16 +248,19 @@ public class GestoPagoProductoServiceImpl implements GestoPagoProductoService {
                         .build());
             }
 
-            log.info("MODO OFFLINE EXITOSO: Se recuperaron {} productos desde la Base de Datos PostgreSQL.", dtoList.size());
+            // Aplicar ordenamiento por Stream también al recuperar desde BD offline
+            dtoList = ordenarProductosPorTipoFront(dtoList);
+
+            log.info("MODO OFFLINE EXITOSO: Se recuperaron y ordenaron {} productos desde la BD PostgreSQL.", dtoList.size());
 
             return ConsultaProductosResponse.builder()
                     .codigo("01")
-                    .mensaje("Productos recuperados desde Base de Datos local (Modo Offline / Sin conexión). Causa: " + causaFalla)
+                    .mensaje("Productos recuperados desde Base de Datos local (Modo Offline). Causa: " + causaFalla)
                     .productos(dtoList)
                     .build();
 
         } catch (Exception e) {
-            log.error("Error crítico al intentar consultar la Base de Datos de respaldo: {}", e.getMessage(), e);
+            log.error("Error al consultar la Base de Datos de respaldo: {}", e.getMessage(), e);
             return ConsultaProductosResponse.builder()
                     .codigo("500")
                     .mensaje("Error al acceder a la base de datos de respaldo offline.")
@@ -258,27 +269,15 @@ public class GestoPagoProductoServiceImpl implements GestoPagoProductoService {
         }
     }
 
-    /**
-     * Almacena el objeto de respuesta en Redis Caché con tiempo de expiración (TTL).
-     * 
-     * ¿QUÉ HACE? Guarda la estructura JSON en la clave de Redis 'gestopago:productos:catalogo'.
-     * ¿CÓMO LO HACE? Utiliza `redisTemplate.opsForValue().set(key, value, duration)`.
-     */
     private void guardarEnRedis(ConsultaProductosResponse response) {
         try {
             redisTemplate.opsForValue().set(REDIS_CACHE_KEY, response, Duration.ofHours(24));
-            log.info("Catálogo de productos actualizado exitosamente en REDIS CACHÉ (TTL: 24 horas).");
+            log.info("Catálogo de productos ordenado actualizado exitosamente en REDIS CACHÉ (TTL: 24 horas).");
         } catch (Exception e) {
             log.warn("No se pudo guardar la información en Redis Caché: {}", e.getMessage());
         }
     }
 
-    /**
-     * Resuelve el Bearer Token dinámicamente.
-     * 
-     * ¿QUÉ HACE? Obtiene la credencial válida para autenticar contra GestoPago.
-     * ¿CÓMO LO HACE? Consulta `GestoPagoTokenService` en BD o usa el token estático de `application.properties` como fallback.
-     */
     private String resolverBearerToken() {
         try {
             Optional<GestoPagoToken> tokenOpt = gestoPagoTokenService.obtenerTokenActivo(idDistribuidor, codigoDispositivo);
@@ -291,9 +290,6 @@ public class GestoPagoProductoServiceImpl implements GestoPagoProductoService {
         return tokenConfigurado != null ? tokenConfigurado : "";
     }
 
-    /**
-     * Formatea el encabezado de autorización HTTP agregando el prefijo 'Bearer '.
-     */
     private String formatearBearerHeader(String token) {
         if (token == null || token.isBlank()) {
             return "";
@@ -304,9 +300,6 @@ public class GestoPagoProductoServiceImpl implements GestoPagoProductoService {
         return "Bearer " + token;
     }
 
-    /**
-     * Enmascara tokens en logs para seguridad.
-     */
     private String enmascararToken(String token) {
         if (token == null || token.length() < 10) {
             return "****";
@@ -314,9 +307,6 @@ public class GestoPagoProductoServiceImpl implements GestoPagoProductoService {
         return token.substring(0, 6) + "..." + token.substring(token.length() - 4);
     }
 
-    /**
-     * Convierte la respuesta XML de GestoPago a objetos DTO limpios sin nulos.
-     */
     private List<ProductoDto> mapearProductosDto(GestoPagoProductXmlResponse xmlResponse) {
         List<ProductoDto> dtoList = new ArrayList<>();
         if (xmlResponse.getProductos() == null || xmlResponse.getProductos().getListaProductos() == null) {
@@ -333,13 +323,15 @@ public class GestoPagoProductoServiceImpl implements GestoPagoProductoService {
                 } catch (NumberFormatException ignored) {}
             }
 
+            String tipoFrontValor = item.getTipoFront() != null && !item.getTipoFront().isBlank() ? item.getTipoFront() : "0";
+
             ProductoDto dto = ProductoDto.builder()
                     .servicio(item.getServicio() != null ? item.getServicio() : "")
                     .producto(item.getProducto() != null ? item.getProducto() : "")
                     .idServicio(item.getIdServicio() != null ? item.getIdServicio() : "")
                     .idProducto(item.getIdProducto() != null ? item.getIdProducto() : "")
                     .idCatTipoServicio(item.getIdCatTipoServicio() != null ? item.getIdCatTipoServicio() : "")
-                    .tipoFront(item.getTipoFront() != null ? item.getTipoFront() : "")
+                    .tipoFront(tipoFrontValor)
                     .hasDigitoVerificador(Boolean.parseBoolean(item.getHasDigitoVerificador()))
                     .precio(precioParsed)
                     .showAyuda(Boolean.parseBoolean(item.getShowAyuda()))
@@ -352,9 +344,6 @@ public class GestoPagoProductoServiceImpl implements GestoPagoProductoService {
         return dtoList;
     }
 
-    /**
-     * Convierte la lista de DTOs a entidades JPA `GestoPagoProducto` para su inserción en PostgreSQL.
-     */
     private List<GestoPagoProducto> mapearEntidadesBd(List<ProductoDto> dtoList) {
         List<GestoPagoProducto> entidades = new ArrayList<>();
         LocalDateTime ahora = LocalDateTime.now();

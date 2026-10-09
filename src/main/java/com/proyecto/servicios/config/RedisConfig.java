@@ -16,13 +16,9 @@ import org.springframework.data.redis.serializer.StringRedisSerializer;
 
 import java.time.Duration;
 
-
- // Configuración centralizada de Redis Caché para la aplicación.
-
- // Habilita y configura el soporte de almacenamiento en caché usando Redis como almacén en memoria principal.
-
- // Define un RedisTemplate<String, Object> con serialización JSON para fácil lectura y depuración de claves/valores.
- // Configura RedisCacheManager con un tiempo de vida (TTL) por defecto para que las entradas expiren según las necesidades de negocio.
+/**
+ * Configuración de Redis Caché.
+ */
 @Configuration
 @EnableCaching
 public class RedisConfig {
@@ -49,7 +45,6 @@ public class RedisConfig {
 
         return template;
     }
-
 
     @Bean
     public RedisCacheManager cacheManager(RedisConnectionFactory connectionFactory) {

@@ -33,7 +33,14 @@ public class FlywayConfig {
                 .baselineOnMigrate(true)
                 .baselineVersion("0")
                 .load();
+        
+        // Repara automáticamente el historial de checksums si un archivo de migración fue editado en desarrollo
+        log.info("Ejecutando flyway.repair() para actualizar checksums y sincronizar historial de migraciones");
+        flyway.repair();
+        
+        log.info("Ejecutando flyway.migrate()");
         flyway.migrate();
+        
         return flyway;
     }
 }

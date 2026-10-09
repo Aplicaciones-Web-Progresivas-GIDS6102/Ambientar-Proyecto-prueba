@@ -5,18 +5,7 @@ import lombok.*;
 
 import java.time.LocalDateTime;
 
-/**
- * Entidad JPA que representa un producto de GestoPago en la base de datos PostgreSQL.
- * 
- * ¿QUÉ HACE?
- * Sirve como modelo relacional persistente para guardar los productos recuperados del servicio web externo.
- * Permite tener una copia local limpia de la lista de productos que sirve como respaldo (fallback) en modo offline
- * cuando el servicio externo no está disponible o no hay conexión a Internet.
- * 
- * ¿CÓMO LO HACE?
- * Mapea la tabla 'gestopago_productos' en PostgreSQL. Los datos se actualizan sobrescribiendo los registros anteriores
- * únicamente cuando se recibe una respuesta exitosa (HTTP 200) del servicio externo.
- */
+
 @Entity
 @Table(name = "gestopago_productos")
 @Getter

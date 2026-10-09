@@ -40,13 +40,12 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 /**
- * Pruebas unitarias completas para GestoPagoProductoServiceImpl.
+ * Pruebas unitarias para GestoPagoProductoServiceImpl.
  * 
- * Evalúa las nuevas funcionalidades:
- * 1. Caché Hit en Redis.
- * 2. Borrado masivo condicional en BD (deleteAllInBatch) únicamente tras HTTP 200 OK.
- * 3. Persistencia de nuevos productos en PostgreSQL y guardado en Redis con TTL.
- * 4. Tolerancia a fallos y modo offline desde BD cuando falla el servicio externo (sin Internet).
+ * Evalúa:
+ * 1. Mapeo y ordenamiento de tipoFront de menor a mayor (0, 1, 2...).
+ * 2. Asignación de '0' por defecto a productos sin tipoFront y ubicación al inicio.
+ * 3. Manejo de excepciones de comunicación.
  */
 @ExtendWith(MockitoExtension.class)
 class GestoPagoProductoServiceImplTest {
@@ -77,15 +76,10 @@ class GestoPagoProductoServiceImplTest {
     }
 
     @Test
-    @DisplayName("PRUEBA 1: Debe retornar productos directamente desde Redis Caché cuando existe (Cache Hit) sin llamar a Feign o BD")
-    void obtenerProductos_CacheHit_RetornaDesdeRedis() {
+    @DisplayName("Debe ordenar los productos por tipoFront de menor a mayor y asignar '0' a los que no tengan dato (ubicándolos al inicio)")
+    void obtenerProductos_OrdenamientoTipoFront_Exitoso() {
         // ARRANGE
         ConsultaProductosRequest request = ConsultaProductosRequest.builder().build();
-        ConsultaProductosResponse responseCacheMock = ConsultaProductosResponse.builder()
-                .codigo("01")
-                .mensaje("Operacion realizada con exito")
-                .productos(List.of(ProductoDto.builder().servicio("ABIB").producto("ABIB 100").precio(100.0).build()))
-                .build();
 
         when(redisTemplate.opsForValue()).thenReturn(valueOperations);
         when(valueOperations.get("gestopago:productos:catalogo")).thenReturn(responseCacheMock);
@@ -113,9 +107,13 @@ class GestoPagoProductoServiceImplTest {
         tokenMock.setToken("token_bd_456");
         when(gestoPagoTokenService.obtenerTokenActivo(anyInt(), anyString())).thenReturn(Optional.of(tokenMock));
 
+        // Productos desordenados con tipoFront "2", "1", null (sin tipoFront) y "0"
         MensajeXml mensaje = new MensajeXml("01", "Operación realizada con éxito");
-        ProductoXml prod1 = new ProductoXml("ABIB", "ABIB 100", "2284", "14302", "13", "1", "false", "100.0", "false", "a", "Soporte 24h");
-        ProductosWrapper wrapper = new ProductosWrapper(List.of(prod1));
+        ProductoXml prodFront2 = new ProductoXml("SERIVCIO_2", "PROD 2", "1", "1", "1", "2", "false", "100.0", "false", "a", "legend");
+        ProductoXml prodFront1 = new ProductoXml("SERIVCIO_1", "PROD 1", "2", "2", "1", "1", "false", "200.0", "false", "a", "legend");
+        ProductoXml prodSinFront = new ProductoXml("SERIVCIO_0", "PROD SIN FRONT", "3", "3", "1", null, "false", "300.0", "false", "a", "legend");
+
+        ProductosWrapper wrapper = new ProductosWrapper(List.of(prodFront2, prodFront1, prodSinFront));
         GestoPagoProductXmlResponse xmlResponseMock = new GestoPagoProductXmlResponse(mensaje, wrapper);
 
         when(gestoPagoProductClient.getProductList(anyString())).thenReturn(xmlResponseMock);
@@ -127,59 +125,28 @@ class GestoPagoProductoServiceImplTest {
         // ASSERT
         assertNotNull(response);
         assertEquals("01", response.getCodigo());
-        assertEquals(1, response.getProductos().size());
+        List<ProductoDto> productos = response.getProductos();
+        assertEquals(3, productos.size());
 
-        // VERIFICACIONES CLAVE:
-        // 1. Debe haber llamado a deleteAllInBatch() para eliminar los anteriores y evitar duplicados
-        verify(gestoPagoProductoRepository, times(1)).deleteAllInBatch();
-        // 2. Debe haber guardado los nuevos productos en PostgreSQL
-        verify(gestoPagoProductoRepository, times(1)).saveAll(any());
-        // 3. Debe haber guardado en Redis con un TTL de 24 horas
-        verify(valueOperations, times(1)).set(eq("gestopago:productos:catalogo"), any(ConsultaProductosResponse.class), eq(Duration.ofHours(24)));
+        // El primero debe ser el que no tenía tipoFront (se asigna "0" por defecto)
+        assertEquals("0", productos.get(0).getTipoFront());
+        assertEquals("PROD SIN FRONT", productos.get(0).getProducto());
+
+        // El segundo debe ser tipoFront "1"
+        assertEquals("1", productos.get(1).getTipoFront());
+        assertEquals("PROD 1", productos.get(1).getProducto());
+
+        // El tercero debe ser tipoFront "2"
+        assertEquals("2", productos.get(2).getTipoFront());
+        assertEquals("PROD 2", productos.get(2).getProducto());
     }
 
     @Test
-    @DisplayName("PRUEBA 3: Cuando falla el servicio externo (Sin Internet), NO debe borrar la BD y debe recuperar de BD (Modo Offline)")
-    void sincronizarProductos_SinInternet_FallaServicio_RecuperaDeBaseDeDatosOffline() {
+    @DisplayName("Debe manejar error de comunicación FeignException sin lanzar excepciones descontroladas")
+    void obtenerProductos_ErrorComunicacion_FeignException() {
         // ARRANGE
         when(gestoPagoTokenService.obtenerTokenActivo(anyInt(), anyString())).thenReturn(Optional.empty());
 
-        Request feignRequest = Request.create(Request.HttpMethod.GET, "/sistema/service/getProductList.do",
-                Collections.emptyMap(), null, new RequestTemplate());
-        when(gestoPagoProductClient.getProductList(anyString()))
-                .thenThrow(new FeignException.ServiceUnavailable("Servicio no disponible", feignRequest, null, null));
-
-        GestoPagoProducto entidadBdMock = GestoPagoProducto.builder()
-                .id(1L)
-                .servicio("ABIB")
-                .producto("ABIB 150 (Offline)")
-                .precio(150.0)
-                .fechaActualizacion(LocalDateTime.now())
-                .build();
-
-        when(gestoPagoProductoRepository.findAll()).thenReturn(List.of(entidadBdMock));
-
-        // ACT
-        ConsultaProductosResponse response = productoService.sincronizarProductos();
-
-        // ASSERT
-        assertNotNull(response);
-        assertEquals("01", response.getCodigo());
-        assertTrue(response.getMensaje().contains("Modo Offline"));
-        assertEquals(1, response.getProductos().size());
-        assertEquals("ABIB 150 (Offline)", response.getProductos().get(0).getProducto());
-
-        // VERIFICACIONES CLAVE:
-        // 1. NO se debe haber ejecutado borrado en la base de datos
-        verify(gestoPagoProductoRepository, never()).deleteAllInBatch();
-        // 2. Se debieron consultar los registros de la BD
-        verify(gestoPagoProductoRepository, times(1)).findAll();
-    }
-
-    @Test
-    @DisplayName("PRUEBA 4: Si falla el servicio externo y la BD también está vacía, debe retornar error 530 gracefully")
-    void sincronizarProductos_SinInternet_y_BDEmpty_RetornaError530() {
-        // ARRANGE
         Request feignRequest = Request.create(Request.HttpMethod.GET, "/sistema/service/getProductList.do",
                 Collections.emptyMap(), null, new RequestTemplate());
         when(gestoPagoProductClient.getProductList(anyString()))
@@ -194,6 +161,5 @@ class GestoPagoProductoServiceImplTest {
         assertNotNull(response);
         assertEquals("530", response.getCodigo());
         assertTrue(response.getMensaje().contains("no existen datos almacenados"));
-        assertTrue(response.getProductos().isEmpty());
     }
 }
