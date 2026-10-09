@@ -7,9 +7,8 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-/**
- * DTO para la petición de consulta de productos.
- */
+//DTO para la petición de consulta de productos.
+
 @Data
 @Builder
 @NoArgsConstructor
