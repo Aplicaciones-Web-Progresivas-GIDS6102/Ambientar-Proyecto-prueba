@@ -276,22 +276,60 @@ public class ClienteServiceImpl implements ClienteService {
 
     private Pais obtenerOCrearPais(Long id, String nombre) {
         if (id != null) {
-            return paisRepository.findById(id)
-                    .orElseThrow(() -> new ValidacionNegocioException("No se encontró el país con ID: " + id));
+            var paisOpt = paisRepository.findById(id);
+            if (paisOpt.isPresent()) {
+                return paisOpt.get();
+            }
         }
-        String nombrePais = (nombre != null && !nombre.isBlank()) ? nombre : "MÉXICO";
+
+        String nombrePais = (nombre != null && !nombre.isBlank()) ? nombre.trim() : "MÉXICO";
+        if ("MEXICANA".equalsIgnoreCase(nombrePais) || "MEXICANO".equalsIgnoreCase(nombrePais) || "MEXICO".equalsIgnoreCase(nombrePais)) {
+            nombrePais = "MÉXICO";
+        }
+
+        var optPorNombre = paisRepository.findByNombreIgnoreCase(nombrePais);
+        if (optPorNombre.isPresent()) {
+            return optPorNombre.get();
+        }
+
         String iso = nombrePais.length() >= 3 ? nombrePais.substring(0, 3).toUpperCase() : "MEX";
-        return paisRepository.findByNombreIgnoreCase(nombrePais)
-                .orElseGet(() -> paisRepository.save(Pais.builder().nombre(nombrePais).codigoIso(iso).activo(true).build()));
+        var optPorIso = paisRepository.findByCodigoIsoIgnoreCase(iso);
+        if (optPorIso.isPresent()) {
+            return optPorIso.get();
+        }
+
+        return paisRepository.save(Pais.builder()
+                .nombre(nombrePais)
+                .codigoIso(iso)
+                .activo(true)
+                .build());
     }
 
     private EstadoCivil obtenerOCrearEstadoCivil(Long id, String descripcion) {
         if (id != null) {
-            return estadoCivilRepository.findById(id)
-                    .orElseThrow(() -> new ValidacionNegocioException("No se encontró el estado civil con ID: " + id));
+            var ecOpt = estadoCivilRepository.findById(id);
+            if (ecOpt.isPresent()) {
+                return ecOpt.get();
+            }
         }
-        String desc = (descripcion != null && !descripcion.isBlank()) ? descripcion : "SOLTERO";
-        return estadoCivilRepository.findByDescripcionIgnoreCase(desc)
-                .orElseGet(() -> estadoCivilRepository.save(EstadoCivil.builder().descripcion(desc).activo(true).build()));
+
+        String desc = (descripcion != null && !descripcion.isBlank()) ? descripcion.trim() : "SOLTERO(A)";
+
+        var optDirecto = estadoCivilRepository.findByDescripcionIgnoreCase(desc);
+        if (optDirecto.isPresent()) {
+            return optDirecto.get();
+        }
+
+        String descNormalizada = desc;
+        if ("SOLTERO".equalsIgnoreCase(desc) || "SOLTERA".equalsIgnoreCase(desc)) descNormalizada = "SOLTERO(A)";
+        else if ("CASADO".equalsIgnoreCase(desc) || "CASADA".equalsIgnoreCase(desc)) descNormalizada = "CASADO(A)";
+        else if ("DIVORCIADO".equalsIgnoreCase(desc) || "DIVORCIADA".equalsIgnoreCase(desc)) descNormalizada = "DIVORCIADO(A)";
+        else if ("VIUDO".equalsIgnoreCase(desc) || "VIUDA".equalsIgnoreCase(desc)) descNormalizada = "VIUDO(A)";
+
+        return estadoCivilRepository.findByDescripcionIgnoreCase(descNormalizada)
+                .orElseGet(() -> estadoCivilRepository.save(EstadoCivil.builder()
+                        .descripcion(desc)
+                        .activo(true)
+                        .build()));
     }
 }

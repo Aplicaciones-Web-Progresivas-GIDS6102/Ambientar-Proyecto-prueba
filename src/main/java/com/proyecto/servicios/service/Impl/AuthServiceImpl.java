@@ -38,27 +38,31 @@ public class AuthServiceImpl implements AuthService {
     @Override
     @Transactional
     public AuthResponseDTO login(LoginRequestDTO request) {
-        log.info("Intento de inicio de sesión para el usuario: {}", request.getUsername());
+        String username = request.getUsername() != null ? request.getUsername().trim() : "";
+        log.info("Intento de inicio de sesión para el usuario: {}", username);
 
-        Usuario usuario = usuarioRepository.findByUsername(request.getUsername())
+        Usuario usuario = usuarioRepository.findByUsername(username)
                 .orElseThrow(() -> new CredencialesInvalidasException("Nombre de usuario o contraseña incorrectos."));
 
+        int intentos = usuario.getIntentosFallidos() != null ? usuario.getIntentosFallidos() : 0;
+
         if (!passwordEncoder.matches(request.getPassword(), usuario.getPasswordHash())) {
-            log.warn("Contraseña incorrecta para el usuario: {}", request.getUsername());
-            usuario.setIntentosFallidos(usuario.getIntentosFallidos() + 1);
-            if (usuario.getIntentosFallidos() >= 5) {
+            log.warn("Contraseña incorrecta para el usuario: {}", username);
+            intentos++;
+            usuario.setIntentosFallidos(intentos);
+            if (intentos >= 5) {
                 usuario.setBloqueado(true);
             }
             usuarioRepository.save(usuario);
             throw new CredencialesInvalidasException("Nombre de usuario o contraseña incorrectos.");
         }
 
-        if (Boolean.TRUE.equals(usuario.getBloqueado()) || !Boolean.TRUE.equals(usuario.getActivo())) {
+        if (Boolean.TRUE.equals(usuario.getBloqueado()) || Boolean.FALSE.equals(usuario.getActivo())) {
             throw new ValidacionNegocioException("La cuenta de usuario se encuentra bloqueada o inactiva.");
         }
 
         Cliente cliente = usuario.getCliente();
-        if (cliente == null || !Boolean.TRUE.equals(cliente.getActivo())) {
+        if (cliente == null || Boolean.FALSE.equals(cliente.getActivo())) {
             throw new ValidacionNegocioException("El cliente asociado no se encuentra activo.");
         }
 
@@ -66,6 +70,17 @@ public class AuthServiceImpl implements AuthService {
         usuario.setIntentosFallidos(0);
         usuario.setFechaUltimoAcceso(LocalDateTime.now());
         usuarioRepository.save(usuario);
+
+        // Desactivar sesiones previas activas del mismo usuario
+        var sesionesPrevias = sesionRepository.findByUsuarioId(usuario.getId());
+        if (sesionesPrevias != null && !sesionesPrevias.isEmpty()) {
+            for (Sesion s : sesionesPrevias) {
+                if (Boolean.TRUE.equals(s.getActiva())) {
+                    s.setActiva(false);
+                }
+            }
+            sesionRepository.saveAll(sesionesPrevias);
+        }
 
         // Generar JWT
         String token = jwtUtil.generateToken(usuario.getUsername(), cliente.getId());
@@ -95,10 +110,11 @@ public class AuthServiceImpl implements AuthService {
     @Override
     @Transactional
     public UsuarioResponseDTO register(RegisterRequestDTO request) {
-        log.info("Registrando usuario para el cliente ID: {}", request.getClienteId());
+        String username = request.getUsername() != null ? request.getUsername().trim() : "";
+        log.info("Registrando usuario '{}' para el cliente ID: {}", username, request.getClienteId());
 
-        if (usuarioRepository.existsByUsername(request.getUsername())) {
-            throw new UsuarioYaExisteException("El nombre de usuario '" + request.getUsername() + "' ya está registrado.");
+        if (usuarioRepository.existsByUsername(username)) {
+            throw new UsuarioYaExisteException("El nombre de usuario '" + username + "' ya está registrado.");
         }
 
         Cliente cliente = clienteRepository.findById(request.getClienteId())
@@ -110,7 +126,7 @@ public class AuthServiceImpl implements AuthService {
 
         Usuario usuario = Usuario.builder()
                 .cliente(cliente)
-                .username(request.getUsername())
+                .username(username)
                 .passwordHash(passwordEncoder.encode(request.getPassword()))
                 .activo(true)
                 .intentosFallidos(0)
