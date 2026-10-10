@@ -10,10 +10,9 @@ import lombok.NoArgsConstructor;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * DTO que mapea la raíz del XML <RESPONSE> devuelto por el servicio externo GestoPago.
- * Utiliza anotaciones de Jackson XML para deserializar los nodos <MENSAJE> y <PRODUCTOS>.
- */
+ //DTO que mapea la raíz del XML <RESPONSE> devuelto por el servicio externo GestoPago.
+ //Utiliza anotaciones de Jackson XML para deserializar los nodos <MENSAJE> y <PRODUCTOS>.
+
 @Data
 @NoArgsConstructor
 @AllArgsConstructor

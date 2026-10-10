@@ -1,11 +1,9 @@
 package com.proyecto.servicios.entity;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import com.proyecto.servicios.enums.Sexo;
 import jakarta.persistence.*;
 import lombok.*;
 
-import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -42,48 +40,37 @@ public class Cliente {
     @Column(name = "fecha_nacimiento", nullable = false)
     private LocalDate fechaNacimiento;
 
-    @Column(name = "curp", nullable = false, unique = true, length = 18)
+    @Column(name = "curp", nullable = false, unique = true)
     private String curp;
 
-    @Column(name = "rfc", nullable = false, unique = true, length = 13)
+    @Column(name = "rfc", nullable = false, unique = true)
     private String rfc;
 
-    @Enumerated(EnumType.STRING)
-    @Column(name = "sexo", nullable = false, length = 1)
-    private Sexo sexo;
+    @Column(name = "sexo", nullable = false)
+    private String sexo;
 
-    @Column(name = "nacionalidad", nullable = false)
-    private String nacionalidad;
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "nacionalidad_id", nullable = false)
+    @JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
+    private Pais nacionalidad;
 
-    @Column(name = "estado_civil")
-    private String estadoCivil;
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "estado_civil_id", nullable = false)
+    @JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
+    private EstadoCivil estadoCivil;
 
-    @Column(name = "correo", nullable = false, unique = true, length = 100)
+    @Column(name = "correo", nullable = false, unique = true)
     private String correo;
 
-    @Column(name = "movil", nullable = false, length = 10)
-    private String movil;
+    @Column(name = "telefono_movil", nullable = false)
+    private String telefonoMovil;
 
-    @Column(name = "telefono_alternativo", length = 15)
+    @Column(name = "telefono_alternativo")
     private String telefonoAlternativo;
 
-    @Column(name = "ocupacion")
-    private String ocupacion;
-
-    @Column(name = "empresa")
-    private String empresa;
-
-    @Column(name = "ingreso_mensual", nullable = false, precision = 15, scale = 2)
-    private BigDecimal ingresoMensual;
-
     @Column(name = "activo", nullable = false)
-    private Boolean activo;
-
-    @Column(name = "eliminado", nullable = false)
-    private Boolean eliminado;
-
-    @Column(name = "fecha_baja")
-    private LocalDateTime fechaBaja;
+    @Builder.Default
+    private Boolean activo = true;
 
     @Column(name = "fecha_creacion", nullable = false, updatable = false)
     private LocalDateTime fechaCreacion;
@@ -91,11 +78,19 @@ public class Cliente {
     @Column(name = "fecha_actualizacion", nullable = false)
     private LocalDateTime fechaActualizacion;
 
+    @Column(name = "fecha_baja")
+    private LocalDateTime fechaBaja;
+
     // Relaciones JPA
     @OneToOne(mappedBy = "cliente", cascade = CascadeType.ALL, fetch = FetchType.LAZY, optional = true)
     @JsonIgnoreProperties("cliente")
     @ToString.Exclude
     private Domicilio domicilio;
+
+    @OneToOne(mappedBy = "cliente", cascade = CascadeType.ALL, fetch = FetchType.LAZY, optional = true)
+    @JsonIgnoreProperties("cliente")
+    @ToString.Exclude
+    private InformacionLaboral informacionLaboral;
 
     @OneToMany(mappedBy = "cliente", fetch = FetchType.LAZY)
     @JsonIgnoreProperties("cliente")
@@ -103,22 +98,15 @@ public class Cliente {
     @ToString.Exclude
     private List<Cuenta> cuentas = new ArrayList<>();
 
-    @OneToOne(mappedBy = "cliente", cascade = CascadeType.ALL, fetch = FetchType.LAZY, optional = true)
-    @JsonIgnoreProperties("cliente")
-    @ToString.Exclude
-    private Usuario usuario;
-
     @OneToMany(mappedBy = "cliente", fetch = FetchType.LAZY)
     @JsonIgnoreProperties("cliente")
     @Builder.Default
     @ToString.Exclude
-    private List<BiometriaCliente> biometrias = new ArrayList<>();
+    private List<DatosBiometricos> datosBiometricos = new ArrayList<>();
 
     @PrePersist
     void onCreate() {
         if (activo == null) activo = true;
-        if (eliminado == null) eliminado = false;
-        if (nacionalidad == null) nacionalidad = "MEXICANA";
         fechaCreacion = LocalDateTime.now();
         fechaActualizacion = LocalDateTime.now();
     }

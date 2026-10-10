@@ -4,13 +4,11 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
 import lombok.*;
 
-import java.time.LocalDateTime;
-
 /**
- * Entidad JPA que representa el Domicilio principal del cliente en la tabla 'domicilios'.
+ * Entidad JPA que representa el Domicilio principal del cliente en la tabla 'domicilio'.
  */
 @Entity
-@Table(name = "domicilios")
+@Table(name = "domicilio")
 @Getter
 @Setter
 @Builder
@@ -24,17 +22,17 @@ public class Domicilio {
 
     @OneToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "cliente_id", nullable = false, unique = true)
-    @JsonIgnoreProperties({"domicilio", "cuentas", "usuario", "biometrias"})
+    @JsonIgnoreProperties({"domicilio", "cuentas", "informacionLaboral", "datosBiometricos"})
     @ToString.Exclude
     private Cliente cliente;
 
     @Column(name = "calle", nullable = false)
     private String calle;
 
-    @Column(name = "numero_exterior", nullable = false, length = 20)
+    @Column(name = "numero_exterior", nullable = false)
     private String numeroExterior;
 
-    @Column(name = "numero_interior", length = 20)
+    @Column(name = "numero_interior")
     private String numeroInterior;
 
     @Column(name = "colonia", nullable = false)
@@ -46,27 +44,11 @@ public class Domicilio {
     @Column(name = "estado", nullable = false)
     private String estado;
 
-    @Column(name = "codigo_postal", nullable = false, length = 5)
+    @Column(name = "codigo_postal", nullable = false)
     private String codigoPostal;
 
-    @Column(name = "pais", nullable = false)
-    private String pais;
-
-    @Column(name = "fecha_creacion", nullable = false, updatable = false)
-    private LocalDateTime fechaCreacion;
-
-    @Column(name = "fecha_actualizacion", nullable = false)
-    private LocalDateTime fechaActualizacion;
-
-    @PrePersist
-    void onCreate() {
-        if (pais == null) pais = "MÉXICO";
-        fechaCreacion = LocalDateTime.now();
-        fechaActualizacion = LocalDateTime.now();
-    }
-
-    @PreUpdate
-    void onUpdate() {
-        fechaActualizacion = LocalDateTime.now();
-    }
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "pais_id", nullable = false)
+    @JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
+    private Pais pais;
 }

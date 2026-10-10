@@ -1,7 +1,6 @@
 package com.proyecto.servicios.entity;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import com.proyecto.servicios.enums.EstadoCuenta;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -25,25 +24,17 @@ public class Cuenta {
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "cliente_id", nullable = false)
-    @JsonIgnoreProperties({"cuentas", "domicilio", "usuario", "biometrias"})
+    @JsonIgnoreProperties({"cuentas", "domicilio", "informacionLaboral", "datosBiometricos"})
     @ToString.Exclude
     private Cliente cliente;
 
-    @Column(name = "numero_cuenta", nullable = false, unique = true, length = 20)
+    @Column(name = "numero_cuenta", nullable = false, unique = true)
     private String numeroCuenta;
 
-    @Column(name = "clabe", nullable = false, unique = true, length = 18)
-    private String clabe;
-
-    @Column(name = "tipo_cuenta", nullable = false, length = 30)
-    private String tipoCuenta;
-
-    @Enumerated(EnumType.STRING)
-    @Column(name = "estado", nullable = false, length = 20)
-    private EstadoCuenta estado;
-
-    @Column(name = "activo", nullable = false)
-    private Boolean activo;
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "estatus_cuenta_id", nullable = false)
+    @JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
+    private EstatusCuenta estatusCuenta;
 
     @Column(name = "fecha_creacion", nullable = false, updatable = false)
     private LocalDateTime fechaCreacion;
@@ -58,9 +49,6 @@ public class Cuenta {
 
     @PrePersist
     void onCreate() {
-        if (tipoCuenta == null) tipoCuenta = "DEBITO";
-        if (estado == null) estado = EstadoCuenta.ACTIVA;
-        if (activo == null) activo = true;
         fechaCreacion = LocalDateTime.now();
         fechaActualizacion = LocalDateTime.now();
     }

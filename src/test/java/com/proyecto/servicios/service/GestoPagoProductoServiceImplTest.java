@@ -1,6 +1,7 @@
 package com.proyecto.servicios.service;
 
 import com.proyecto.servicios.client.GestoPagoProductClient;
+import com.proyecto.servicios.entity.gestopago.GestoPagoProducto;
 import com.proyecto.servicios.entity.gestopago.GestoPagoToken;
 import com.proyecto.servicios.model.gestopago.ConsultaProductosRequest;
 import com.proyecto.servicios.model.gestopago.ConsultaProductosResponse;
@@ -25,13 +26,17 @@ import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.time.Duration;
+import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 /**
@@ -76,6 +81,28 @@ class GestoPagoProductoServiceImplTest {
         // ARRANGE
         ConsultaProductosRequest request = ConsultaProductosRequest.builder().build();
 
+        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+        when(valueOperations.get("gestopago:productos:catalogo")).thenReturn(responseCacheMock);
+
+        // ACT
+        ConsultaProductosResponse response = productoService.obtenerProductos(request);
+
+        // ASSERT
+        assertNotNull(response);
+        assertEquals("01", response.getCodigo());
+        assertEquals(1, response.getProductos().size());
+        assertEquals("ABIB 100", response.getProductos().get(0).getProducto());
+
+        // Verificaciones
+        verify(redisTemplate.opsForValue(), times(1)).get("gestopago:productos:catalogo");
+        verifyNoInteractions(gestoPagoProductClient);
+        verifyNoInteractions(gestoPagoProductoRepository);
+    }
+
+    @Test
+    @DisplayName("PRUEBA 2: En HTTP 200 OK exitoso, debe borrar anteriores en BD (deleteAllInBatch), guardar nuevos en BD y actualizar Redis")
+    void sincronizarProductos_Exitoso_Http200_BorraAnterioresGuardaBDyRedis() {
+        // ARRANGE
         GestoPagoToken tokenMock = new GestoPagoToken();
         tokenMock.setToken("token_bd_456");
         when(gestoPagoTokenService.obtenerTokenActivo(anyInt(), anyString())).thenReturn(Optional.of(tokenMock));
