@@ -30,7 +30,8 @@ public class OpenApi {
                         .version("1.0.0")
                         .description("Servicios REST completos para onboarding de clientes personas físicas, cuentas bancarias, saldos, biometría, autenticación JWT y GestoPago."))
                 .servers(List.of(
-                        new Server().url("http://localhost:" + serverPort).description("Servidor Local Activo")
+                        new Server().url("/").description("Servidor Activo (Local / Railway)"),
+                        new Server().url("http://localhost:" + serverPort).description("Servidor Local")
                 ))
                 .addSecurityItem(new SecurityRequirement().addList(securitySchemeName))
                 .components(new Components()
