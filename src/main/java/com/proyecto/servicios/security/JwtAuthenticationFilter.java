@@ -37,6 +37,33 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private long inactivityTimeoutMinutes;
 
     @Override
+    protected boolean shouldNotFilter(HttpServletRequest request) throws ServletException {
+        String path = request.getRequestURI();
+        String method = request.getMethod();
+
+        // Rutas públicas de Autenticación, Swagger y GestoPago
+        if (path.startsWith("/auth/") ||
+            path.startsWith("/v3/api-docs") ||
+            path.startsWith("/swagger-ui") ||
+            path.startsWith("/swagger-resources") ||
+            path.startsWith("/webjars") ||
+            path.startsWith("/gestopago") ||
+            path.startsWith("/api/v1/gestopago") ||
+            path.startsWith("/api/v1/productos")) {
+            return true;
+        }
+
+        // Onboarding público de creación de cliente (POST /clientes y POST /api/v1/clientes)
+        if ("POST".equalsIgnoreCase(method) &&
+            ("/clientes".equals(path) || "/clientes/".equals(path) ||
+             "/api/v1/clientes".equals(path) || "/api/v1/clientes/".equals(path))) {
+            return true;
+        }
+
+        return false;
+    }
+
+    @Override
     protected void doFilterInternal(HttpServletRequest request,
                                     HttpServletResponse response,
                                     FilterChain filterChain) throws ServletException, IOException {

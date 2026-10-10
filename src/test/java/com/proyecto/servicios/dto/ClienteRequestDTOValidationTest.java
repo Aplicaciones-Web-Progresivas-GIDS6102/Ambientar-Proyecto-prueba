@@ -55,7 +55,7 @@ class ClienteRequestDTOValidationTest {
         var violations = validateTelefonoMovil("llllllllll");
         assertEquals(1, violations.size());
         assertEquals(
-                "El teléfono móvil solo debe contener números  de 10 dígitos.",
+                "El teléfono móvil solo debe contener números (entre 10 y 15 dígitos).",
                 violations.iterator().next().getMessage()
         );
     }
@@ -78,7 +78,7 @@ class ClienteRequestDTOValidationTest {
         var violations = validateTelefonoAlternativo("4681072996abc");
         assertEquals(1, violations.size());
         assertEquals(
-                "El teléfono alternativo solo debe contener números (de 10 dígitos).",
+                "El teléfono alternativo solo debe contener números (entre 10 y 15 dígitos).",
                 violations.iterator().next().getMessage()
         );
     }

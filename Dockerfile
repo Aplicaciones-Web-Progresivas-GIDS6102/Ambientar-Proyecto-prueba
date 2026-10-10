@@ -7,7 +7,8 @@ COPY gradlew .
 COPY gradle gradle
 COPY build.gradle settings.gradle gradle.properties ./
 
-RUN chmod +x gradlew
+# Asegurar saltos de línea de Linux (LF) en gradlew y darle permisos de ejecución
+RUN sed -i 's/\r$//' gradlew && chmod +x gradlew
 
 # Copiar el código fuente
 COPY src src
