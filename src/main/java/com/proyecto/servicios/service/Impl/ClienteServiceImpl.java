@@ -102,7 +102,11 @@ public class ClienteServiceImpl implements ClienteService {
     @Transactional(readOnly = true)
     public List<ClienteResponseDTO> obtenerClientesActivos() {
         return clienteRepository.findByActivoTrue().stream()
-                .map(ClienteMapper::toDTO)
+                .map(cliente -> {
+                    ClienteResponseDTO dto = ClienteMapper.toDTO(cliente);
+                    dto.setId(null);
+                    return dto;
+                })
                 .collect(Collectors.toList());
     }
 
