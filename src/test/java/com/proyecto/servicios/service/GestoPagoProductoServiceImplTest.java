@@ -81,6 +81,12 @@ class GestoPagoProductoServiceImplTest {
         // ARRANGE
         ConsultaProductosRequest request = ConsultaProductosRequest.builder().build();
 
+        ConsultaProductosResponse responseCacheMock = ConsultaProductosResponse.builder()
+                .codigo("01")
+                .mensaje("OK")
+                .productos(List.of(ProductoDto.builder().producto("ABIB 100").tipoFront("0").build()))
+                .build();
+
         when(redisTemplate.opsForValue()).thenReturn(valueOperations);
         when(valueOperations.get("gestopago:productos:catalogo")).thenReturn(responseCacheMock);
 
