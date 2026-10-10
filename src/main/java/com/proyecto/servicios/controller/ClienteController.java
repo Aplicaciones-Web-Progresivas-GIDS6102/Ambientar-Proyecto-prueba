@@ -40,26 +40,7 @@ public class ClienteController {
         return ResponseEntity.ok(clienteService.obtenerClientesActivos());
     }
 
-    @Operation(summary = "Obtener Cliente por ID", description = "Busca un cliente por su ID numérico primario.")
-    @GetMapping(value = "/{id:\\d+}", produces = MediaType.APPLICATION_JSON_VALUE)
-    public ResponseEntity<ClienteResponseDTO> obtenerClientePorId(@PathVariable("id") Long id) {
-        return ResponseEntity.ok(clienteService.obtenerClientePorId(id));
-    }
 
-    @Operation(summary = "Actualizar Cliente por ID", description = "Actualiza los datos personales y de domicilio del cliente. No permite modificar CURP ni RFC.")
-    @PutMapping(value = "/{id:\\d+}", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
-    public ResponseEntity<ClienteResponseDTO> actualizarCliente(
-            @PathVariable("id") Long id,
-            @Valid @RequestBody ClienteRequestDTO request) {
-        return ResponseEntity.ok(clienteService.actualizarCliente(id, request));
-    }
-
-    @Operation(summary = "Baja Lógica de Cliente", description = "Marca al cliente y sus cuentas como inactivos sin eliminar físicamente los registros.")
-    @DeleteMapping("/{id:\\d+}")
-    public ResponseEntity<Void> eliminarCliente(@PathVariable("id") Long id) {
-        clienteService.eliminarCliente(id);
-        return ResponseEntity.noContent().build();
-    }
 
     @Operation(summary = "Buscar Cliente por CURP", description = "Obtiene los detalles del cliente filtrando por su clave CURP.")
     @GetMapping(value = {"/curp/{curp}", "/busquedas/curp/{curp}"}, produces = MediaType.APPLICATION_JSON_VALUE)

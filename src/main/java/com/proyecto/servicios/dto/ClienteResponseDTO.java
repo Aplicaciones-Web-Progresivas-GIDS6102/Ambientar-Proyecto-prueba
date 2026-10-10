@@ -11,6 +11,8 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
+
 /**
  * DTO para la respuesta con la información completa de un Cliente, sus Cuentas, Domicilio e Información Laboral.
  */
@@ -20,6 +22,7 @@ import java.util.List;
 @AllArgsConstructor
 public class ClienteResponseDTO {
 
+    @JsonInclude(JsonInclude.Include.NON_NULL)
     private Long id;
     private String nombre;
     private String segundoNombre;
