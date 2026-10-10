@@ -59,9 +59,10 @@ com.proyecto.servicios
 
 ## 4. Decisiones Técnicas e Implementación
 
-### 4.1. Configuración y Autenticación Segura (Sin Hardcodeo)
-- **Decisión**: Para dar cumplimiento a la restricción de no tener tokens hardcodeados en el código fuente, la propiedad `gestopago.products.bearer-token` se definió en `application.properties`.
-- **Resolución Dinámica**: En la capa de servicio (`GestoPagoProductoServiceImpl`), se implementó un mecanismo de resolución que consulta primero la entidad de token activo en base de datos (`GestoPagoTokenService`) y, en caso de ausencia, utiliza la propiedad inyectada mediante `@Value` como respaldo (fallback).
+### 4.1. Configuración y Autenticación Segura (Sin Hardcodeo y Renovación Automática)
+- **Decisión**: Para dar cumplimiento a la restricción de no tener tokens hardcodeados en el código fuente, las propiedades de integración se configuraron dinámicamente en `application.properties`.
+- **Automatización del Token (Vigencia 24h)**: Se implementó un proceso en segundo plano con la anotación `@Scheduled(fixedRateString = "${gestopago.auth.refresh-rate-ms:3600000}")` en `GestoPagoTokenServiceImpl`. Este servicio invoca periódicamente el endpoint `/sistema/app/jwt-gp/authenticate/` del proveedor con las credenciales configuradas (`id-distribuidor=83`, `codigo-dispositivo=GPS83-TPV-17`, `password=12345678`), obtiene un token nuevo y lo almacena automáticamente en la entidad `GestoPagoToken` en Base de Datos PostgreSQL.
+- **Mecanismo de Respaldo (Fallback)**: En la capa de servicio (`GestoPagoProductoServiceImpl`), el método `resolverBearerToken()` busca primero la entidad de token activo en la base de datos y, en caso de no encontrarse, utiliza la propiedad inyectada `gestopago.products.bearer-token` como respaldo defensivo.
 - **Formateo de Encabezado**: Se asegura de agregar el prefijo `Bearer ` dinámicamente antes de enviar la solicitud HTTP en el cliente Feign.
 
 ### 4.2. Mapeo y Transformación de Formato (XML a JSON)
@@ -91,21 +92,21 @@ com.proyecto.servicios
 
 ## 5. Pruebas Unitarias y Cobertura
 
-Se implementó la clase de prueba `GestoPagoProductoServiceImplTest` utilizando **JUnit 5** y **Mockito**. Se agregaron las dependencias de prueba correspondientes en `build.gradle` (`testRuntimeOnly 'org.junit.platform:junit-platform-launcher'`).
+Se implementó la clase de prueba `GestoPagoProductoServiceImplTest` utilizando **JUnit 5** y **Mockito**. Se configuró la tarea de pruebas en `build.gradle` con `testLogging` para visibilidad de ejecuciones.
 
 ### Escenarios Probados:
 1. `obtenerProductos_Exitoso`: Simula la respuesta exitosa del cliente Feign con productos en XML, verificando la transformación correcta a DTOs y la lista no nula.
 2. `obtenerProductos_ErrorComunicacion_FeignException`: Simula una falla de red o tiempo de espera (Timeout) mediante una excepción `FeignException.ServiceUnavailable`, comprobando que la aplicación responda con código `"503"` sin lanzar errores 500 no controlados.
 3. `obtenerProductos_ErrorAutenticacion_Unauthorized`: Simula una falla de autenticación 401 (`FeignException.Unauthorized`), verificando el retorno controlado con código `"401"`.
 
-**Resultado de Ejecución**:
-```bash
-> Task :compileJava UP-TO-DATE
-> Task :compileTestJava UP-TO-DATE
-> Task :test
+**Resultado de Ejecución (`.\gradlew.bat test`)**:
+```text
+GestoPagoProductoServiceImplTest > Debe manejar gracefully un error de comunicación FeignException sin devolver nulos PASSED
+GestoPagoProductoServiceImplTest > Debe manejar error 401 Unauthorized devolviendo respuesta estandarizada PASSED
+GestoPagoProductoServiceImplTest > Debe obtener la lista de productos exitosamente y mapear correctamente desde el XML PASSED
 
-BUILD SUCCESSFUL in 19s
-5 actionable tasks: 2 executed, 3 up-to-date
+BUILD SUCCESSFUL in 9s
+5 actionable tasks: 3 executed, 2 up-to-date
 ```
 
 ---
