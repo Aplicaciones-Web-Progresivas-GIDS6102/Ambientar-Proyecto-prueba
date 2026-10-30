@@ -6,10 +6,14 @@ import com.proyecto.servicios.entity.EstadoCivil;
 import com.proyecto.servicios.entity.InformacionLaboral;
 import com.proyecto.servicios.entity.Pais;
 
+import java.util.Collections;
+import java.util.List;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 /**
  * Mapper para convertir entre ClienteRequestDTO / Cliente entity y ClienteResponseDTO.
+ * Implementa sobrecarga de métodos en toDTO para entidades individuales y colecciones.
  */
 public class ClienteMapper {
 
@@ -56,6 +60,9 @@ public class ClienteMapper {
         return cliente;
     }
 
+    /**
+     * Sobrecarga 1: Convierte una entidad Cliente a ClienteResponseDTO.
+     */
     public static ClienteResponseDTO toDTO(Cliente entity) {
         if (entity == null) return null;
 
@@ -109,5 +116,19 @@ public class ClienteMapper {
                         .map(CuentaMapper::toDTO)
                         .collect(Collectors.toList()) : java.util.Collections.emptyList())
                 .build();
+    }
+
+    /**
+     * Sobrecarga 2: Convierte una lista de entidades Cliente a lista de ClienteResponseDTO.
+     * Reutiliza la sobrecarga individual toDTO(Cliente).
+     */
+    public static List<ClienteResponseDTO> toDTO(List<Cliente> entities) {
+        if (entities == null) {
+            return Collections.emptyList();
+        }
+        return entities.stream()
+                .map(ClienteMapper::toDTO)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toList());
     }
 }

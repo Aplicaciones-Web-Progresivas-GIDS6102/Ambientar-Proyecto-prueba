@@ -1,0 +1,82 @@
+{
+  "info": {
+    "name": "GestoPago - Pagos de Servicios",
+    "description": "Endpoint creado en feature/product-implements: POST /api/v1/gestopago/pagos/servicios. Requiere JWT. Ejecuta primero 'Login' (guarda el token automáticamente). Mientras no existan implementaciones de 2FA y SentTx, un request válido responde 503 sin llamar al proveedor.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8080" },
+    { "key": "jwt", "value": "" },
+    { "key": "numCuenta", "value": "4000123456" }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [{ "key": "token", "value": "{{jwt}}", "type": "string" }]
+  },
+  "item": [
+    {
+      "name": "0. Login (obtener JWT)",
+      "event": [{
+        "listen": "test",
+        "script": { "type": "text/javascript", "exec": [
+          "const r = pm.response.json();",
+          "if (r.token) { pm.collectionVariables.set('jwt', r.token); }"
+        ] }
+      }],
+      "request": {
+        "auth": { "type": "noauth" },
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": "{{baseUrl}}/auth/login",
+        "body": { "mode": "raw", "raw": "{\n  \"username\": \"TU_USUARIO\",\n  \"password\": \"TU_PASSWORD\"\n}" }
+      }
+    },
+    {
+      "name": "Pagar servicio - válido (teléfono)",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": "{{baseUrl}}/api/v1/gestopago/pagos/servicios",
+        "description": "Respuestas posibles: 200 APLICADO, 202 PENDIENTE_CONFIRMACION, 422 RECHAZADO/saldo insuficiente, 400 validación/producto, 401 2FA, 403 cuenta no autorizada, 404 cuenta inexistente, 503 2FA o SentTx no disponibles.",
+        "body": { "mode": "raw", "raw": "{\n  \"numCuenta\": \"{{numCuenta}}\",\n  \"idServicio\": \"2284\",\n  \"idProducto\": \"14302\",\n  \"monto\": 100.00,\n  \"telefono\": \"5512345678\",\n  \"codigo2FA\": \"000000\"\n}" }
+      }
+    },
+    {
+      "name": "Pagar servicio - válido (referencia)",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": "{{baseUrl}}/api/v1/gestopago/pagos/servicios",
+        "body": { "mode": "raw", "raw": "{\n  \"numCuenta\": \"{{numCuenta}}\",\n  \"idServicio\": \"2284\",\n  \"idProducto\": \"14302\",\n  \"monto\": 100.00,\n  \"referencia\": \"REF-123456\",\n  \"codigo2FA\": \"000000\"\n}" }
+      }
+    },
+    {
+      "name": "Error 400 - request inválido",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": "{{baseUrl}}/api/v1/gestopago/pagos/servicios",
+        "body": { "mode": "raw", "raw": "{\n  \"numCuenta\": \"abc\",\n  \"idServicio\": \"\",\n  \"idProducto\": \"14302\",\n  \"monto\": -5,\n  \"codigo2FA\": \"12\"\n}" }
+      }
+    },
+    {
+      "name": "Error 400 - producto no corresponde al servicio",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": "{{baseUrl}}/api/v1/gestopago/pagos/servicios",
+        "body": { "mode": "raw", "raw": "{\n  \"numCuenta\": \"{{numCuenta}}\",\n  \"idServicio\": \"2284\",\n  \"idProducto\": \"99999\",\n  \"monto\": 100.00,\n  \"telefono\": \"5512345678\",\n  \"codigo2FA\": \"000000\"\n}" }
+      }
+    },
+    {
+      "name": "Error 401 - sin JWT",
+      "request": {
+        "auth": { "type": "noauth" },
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": "{{baseUrl}}/api/v1/gestopago/pagos/servicios",
+        "body": { "mode": "raw", "raw": "{\n  \"numCuenta\": \"{{numCuenta}}\",\n  \"idServicio\": \"2284\",\n  \"idProducto\": \"14302\",\n  \"monto\": 100.00,\n  \"telefono\": \"5512345678\",\n  \"codigo2FA\": \"000000\"\n}" }
+      }
+    }
+  ]
+}
