@@ -1,40 +1,37 @@
 package com.proyecto.servicios.repositorys;
 
 import com.proyecto.servicios.entity.Cliente;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.stereotype.Repository;
 
-import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
 /**
- * Repositorio Spring Data JPA para la entidad Cliente.
+ * Repositorio Spring Data JPA para la entidad Cliente con soporte de consultas dinámicas por especificación.
  */
 @Repository
-public interface ClienteRepository extends JpaRepository<Cliente, Long> {
+public interface ClienteRepository extends JpaRepository<Cliente, Long>, JpaSpecificationExecutor<Cliente> {
 
+    @Override
     @EntityGraph(attributePaths = {"nacionalidad", "estadoCivil", "domicilio", "domicilio.pais", "informacionLaboral", "cuentas", "cuentas.saldo", "cuentas.estatusCuenta"})
     Optional<Cliente> findById(Long id);
 
+    @Override
     @EntityGraph(attributePaths = {"nacionalidad", "estadoCivil", "domicilio", "domicilio.pais", "informacionLaboral", "cuentas", "cuentas.saldo", "cuentas.estatusCuenta"})
-    Optional<Cliente> findByCurp(String curp);
+    List<Cliente> findAll(Specification<Cliente> spec);
+
     boolean existsByCurp(String curp);
 
-    @EntityGraph(attributePaths = {"nacionalidad", "estadoCivil", "domicilio", "domicilio.pais", "informacionLaboral", "cuentas", "cuentas.saldo", "cuentas.estatusCuenta"})
-    Optional<Cliente> findByRfc(String rfc);
     boolean existsByRfc(String rfc);
 
-    @EntityGraph(attributePaths = {"nacionalidad", "estadoCivil", "domicilio", "domicilio.pais", "informacionLaboral", "cuentas", "cuentas.saldo", "cuentas.estatusCuenta"})
-    Optional<Cliente> findByCorreo(String correo);
     boolean existsByCorreo(String correo);
+
+    boolean existsByCorreoIgnoreCase(String correo);
 
     @EntityGraph(attributePaths = {"nacionalidad", "estadoCivil", "domicilio", "domicilio.pais", "informacionLaboral", "cuentas", "cuentas.saldo", "cuentas.estatusCuenta"})
     List<Cliente> findByActivoTrue();
-
-    List<Cliente> findByFechaCreacionBetween(LocalDateTime inicio, LocalDateTime fin);
-
-    @EntityGraph(attributePaths = {"nacionalidad", "estadoCivil", "domicilio", "domicilio.pais", "informacionLaboral", "cuentas", "cuentas.saldo", "cuentas.estatusCuenta"})
-    List<Cliente> findByActivoTrueAndFechaCreacionBetween(LocalDateTime inicio, LocalDateTime fin);
 }

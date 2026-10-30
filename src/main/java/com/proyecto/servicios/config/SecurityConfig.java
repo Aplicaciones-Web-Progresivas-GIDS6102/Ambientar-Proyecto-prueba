@@ -53,8 +53,15 @@ public class SecurityConfig {
                         // Rutas públicas de Autenticación y Registro Onboarding
                         .requestMatchers("/auth/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/clientes", "/api/v1/clientes").permitAll()
-                        // Rutas públicas o compatibles de GestoPago
-                        .requestMatchers("/gestopago/**", "/api/v1/gestopago/**", "/api/v1/productos/**").permitAll()
+                        // Catálogo público de productos GestoPago
+                        .requestMatchers(
+                                "/gestopago/productos",
+                                "/api/v1/gestopago/productos",
+                                "/api/v1/gestopago/sincronizar",
+                                "/api/v1/productos/**"
+                        ).permitAll()
+                        // Endpoints de Pagos de GestoPago (requieren autenticación JWT)
+                        .requestMatchers("/api/v1/gestopago/pagos/**").authenticated()
                         // Endpoints bancarios protegidos
                         .anyRequest().authenticated()
                 )

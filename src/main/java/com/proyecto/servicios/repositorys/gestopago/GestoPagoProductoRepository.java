@@ -9,4 +9,8 @@ import org.springframework.stereotype.Repository;
  */
 @Repository
 public interface GestoPagoProductoRepository extends JpaRepository<GestoPagoProducto, Long> {
+
+    java.util.Optional<GestoPagoProducto> findFirstByIdServicioAndIdProducto(String idServicio, String idProducto);
+
+    boolean existsByIdServicio(String idServicio);
 }

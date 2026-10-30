@@ -1,5 +1,7 @@
 package com.proyecto.servicios.service;
 
+import com.proyecto.servicios.dto.ClienteBajaRequestDTO;
+import com.proyecto.servicios.dto.ClienteFiltroRequestDTO;
 import com.proyecto.servicios.dto.ClienteRequestDTO;
 import com.proyecto.servicios.dto.ClienteResponseDTO;
 import com.proyecto.servicios.dto.DomicilioDTO;
@@ -11,9 +13,11 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.jpa.domain.Specification;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -130,12 +134,16 @@ class ClienteServiceImplTest {
                 .build();
     }
 
+    // ==========================================
+    // 1. PRUEBAS DE REGISTRO DE USUARIOS
+    // ==========================================
+
     @Test
     @DisplayName("Debe registrar exitosamente a un nuevo cliente y crear automáticamente su cuenta bancaria")
     void crearCliente_Exitoso() {
         when(clienteRepository.existsByCurp(anyString())).thenReturn(false);
         when(clienteRepository.existsByRfc(anyString())).thenReturn(false);
-        when(clienteRepository.existsByCorreo(anyString())).thenReturn(false);
+        when(clienteRepository.existsByCorreoIgnoreCase(anyString())).thenReturn(false);
         when(paisRepository.findByNombreIgnoreCase(anyString())).thenReturn(Optional.of(paisMock));
         when(estadoCivilRepository.findByDescripcionIgnoreCase(anyString())).thenReturn(Optional.of(estadoCivilMock));
         when(clienteRepository.save(any(Cliente.class))).thenReturn(clienteMock);
@@ -151,6 +159,17 @@ class ClienteServiceImplTest {
 
         verify(clienteRepository, times(1)).save(any(Cliente.class));
         verify(cuentaService, times(1)).crearCuentaParaCliente(any(Cliente.class));
+    }
+
+    @Test
+    @DisplayName("Debe rechazar el registro si el cliente es menor de 18 años")
+    void crearCliente_MenorDeEdad_LanzaExcepcion() {
+        requestDTO.setFechaNacimiento(LocalDate.now().minusYears(17));
+
+        ValidacionNegocioException ex = assertThrows(ValidacionNegocioException.class,
+                () -> clienteService.crearCliente(requestDTO));
+        assertTrue(ex.getMessage().contains("mayor de edad"));
+        verify(clienteRepository, never()).save(any());
     }
 
     @Test
@@ -173,95 +192,14 @@ class ClienteServiceImplTest {
     }
 
     @Test
-    @DisplayName("Debe lanzar ClienteYaExisteException si el correo ya existe")
+    @DisplayName("Debe lanzar ClienteYaExisteException si el correo ya existe (insensible a mayúsculas)")
     void crearCliente_CorreoDuplicado_LanzaExcepcion() {
         when(clienteRepository.existsByCurp(anyString())).thenReturn(false);
         when(clienteRepository.existsByRfc(anyString())).thenReturn(false);
-        when(clienteRepository.existsByCorreo(requestDTO.getCorreo())).thenReturn(true);
+        when(clienteRepository.existsByCorreoIgnoreCase(requestDTO.getCorreo().toLowerCase())).thenReturn(true);
 
         assertThrows(ClienteYaExisteException.class, () -> clienteService.crearCliente(requestDTO));
         verify(clienteRepository, never()).save(any());
-    }
-
-    @Test
-    @DisplayName("Debe obtener un cliente por ID exitosamente")
-    void obtenerClientePorId_Exitoso() {
-        when(clienteRepository.findById(10L)).thenReturn(Optional.of(clienteMock));
-
-        ClienteResponseDTO response = clienteService.obtenerClientePorId(10L);
-
-        assertNotNull(response);
-        assertEquals(10L, response.getId());
-        assertEquals("CARLOS", response.getNombre());
-    }
-
-    @Test
-    @DisplayName("Debe lanzar ClienteNoEncontradoException cuando el ID no existe")
-    void obtenerClientePorId_Inexistente_LanzaExcepcion() {
-        when(clienteRepository.findById(99L)).thenReturn(Optional.empty());
-
-        assertThrows(ClienteNoEncontradoException.class, () -> clienteService.obtenerClientePorId(99L));
-    }
-
-    @Test
-    @DisplayName("Debe lanzar ValidacionNegocioException al intentar modificar la CURP en actualización")
-    void actualizarCliente_IntentoModificarCurp_LanzaExcepcion() {
-        when(clienteRepository.findById(10L)).thenReturn(Optional.of(clienteMock));
-
-        requestDTO.setCurp("MODIFICADA12345678");
-
-        assertThrows(ValidacionNegocioException.class, () -> clienteService.actualizarCliente(10L, requestDTO));
-    }
-
-    @Test
-    @DisplayName("Debe lanzar ValidacionNegocioException al intentar modificar el RFC en actualización")
-    void actualizarCliente_IntentoModificarRfc_LanzaExcepcion() {
-        when(clienteRepository.findById(10L)).thenReturn(Optional.of(clienteMock));
-
-        requestDTO.setRfc("MODIF1234567");
-
-        assertThrows(ValidacionNegocioException.class, () -> clienteService.actualizarCliente(10L, requestDTO));
-    }
-
-    @Test
-    @DisplayName("Debe realizar la baja lógica del cliente y desactivar sus cuentas asociadas")
-    void eliminarCliente_BajaLogica_Exitoso() {
-        when(clienteRepository.findById(10L)).thenReturn(Optional.of(clienteMock));
-        when(cuentaRepository.findByClienteId(10L)).thenReturn(List.of(cuentaMock));
-        when(estatusCuentaRepository.findByNombreIgnoreCase("INACTIVA")).thenReturn(Optional.of(EstatusCuenta.builder().nombre("INACTIVA").build()));
-
-        clienteService.eliminarCliente(10L);
-
-        assertFalse(clienteMock.getActivo());
-        assertNotNull(clienteMock.getFechaBaja());
-
-        assertEquals("INACTIVA", cuentaMock.getEstatusCuenta().getNombre());
-
-        verify(clienteRepository, times(1)).save(clienteMock);
-        verify(cuentaRepository, times(1)).save(cuentaMock);
-    }
-
-    @Test
-    @DisplayName("Debe buscar clientes por rango de fechas de creación válido")
-    void buscarPorFechaCreacion_RangoValido_Exitoso() {
-        LocalDateTime inicio = LocalDateTime.now().minusDays(5);
-        LocalDateTime fin = LocalDateTime.now();
-
-        when(clienteRepository.findByActivoTrueAndFechaCreacionBetween(inicio, fin)).thenReturn(List.of(clienteMock));
-
-        List<ClienteResponseDTO> resultados = clienteService.buscarPorFechaCreacion(inicio, fin);
-
-        assertNotNull(resultados);
-        assertEquals(1, resultados.size());
-    }
-
-    @Test
-    @DisplayName("Debe lanzar ValidacionNegocioException si la fecha inicio es posterior a fecha fin")
-    void buscarPorFechaCreacion_RangoInvalido_LanzaExcepcion() {
-        LocalDateTime inicio = LocalDateTime.now();
-        LocalDateTime fin = LocalDateTime.now().minusDays(5);
-
-        assertThrows(ValidacionNegocioException.class, () -> clienteService.buscarPorFechaCreacion(inicio, fin));
     }
 
     @Test
@@ -269,7 +207,7 @@ class ClienteServiceImplTest {
     void crearCliente_FalloCuenta_PropagaExcepcion() {
         when(clienteRepository.existsByCurp(anyString())).thenReturn(false);
         when(clienteRepository.existsByRfc(anyString())).thenReturn(false);
-        when(clienteRepository.existsByCorreo(anyString())).thenReturn(false);
+        when(clienteRepository.existsByCorreoIgnoreCase(anyString())).thenReturn(false);
         when(paisRepository.findByNombreIgnoreCase(anyString())).thenReturn(Optional.of(paisMock));
         when(estadoCivilRepository.findByDescripcionIgnoreCase(anyString())).thenReturn(Optional.of(estadoCivilMock));
         when(clienteRepository.save(any(Cliente.class))).thenReturn(clienteMock);
@@ -277,5 +215,110 @@ class ClienteServiceImplTest {
                 .thenThrow(new RuntimeException("Fallo en base de datos al crear saldo"));
 
         assertThrows(RuntimeException.class, () -> clienteService.crearCliente(requestDTO));
+    }
+
+    // ==========================================
+    // 2. PRUEBAS DE CONSULTA POR FILTROS
+    // ==========================================
+
+    @Test
+    @DisplayName("Debe consultar clientes con DTO de filtros combinables")
+    void buscarClientes_ConFiltroDTO_Exitoso() {
+        ClienteFiltroRequestDTO filtro = ClienteFiltroRequestDTO.builder()
+                .nombre("CARLOS")
+                .correo("carlos@email.com")
+                .build();
+
+        when(clienteRepository.findAll(any(Specification.class))).thenReturn(List.of(clienteMock));
+
+        List<ClienteResponseDTO> resultados = clienteService.buscarClientes(filtro);
+
+        assertNotNull(resultados);
+        assertEquals(1, resultados.size());
+        assertEquals("CARLOS", resultados.get(0).getNombre());
+        verify(clienteRepository, times(1)).findAll(any(Specification.class));
+    }
+
+    @Test
+    @DisplayName("Debe consultar clientes sin filtros devolviendo todos los activos")
+    void buscarClientes_SinFiltros_Exitoso() {
+        when(clienteRepository.findAll(any(Specification.class))).thenReturn(List.of(clienteMock));
+
+        List<ClienteResponseDTO> resultados = clienteService.buscarClientes((ClienteFiltroRequestDTO) null);
+
+        assertNotNull(resultados);
+        assertEquals(1, resultados.size());
+        verify(clienteRepository, times(1)).findAll(any(Specification.class));
+    }
+
+    @Test
+    @DisplayName("Debe ejecutar sobrecarga de búsqueda por (nombre, correo) delegando correctamente")
+    void buscarClientes_SobrecargaNombreCorreo_Exitoso() {
+        when(clienteRepository.findAll(any(Specification.class))).thenReturn(List.of(clienteMock));
+
+        List<ClienteResponseDTO> resultados = clienteService.buscarClientes("CARLOS", "carlos@email.com");
+
+        assertNotNull(resultados);
+        assertEquals(1, resultados.size());
+        assertEquals("CARLOS", resultados.get(0).getNombre());
+        verify(clienteRepository, times(1)).findAll(any(Specification.class));
+    }
+
+    // ==========================================
+    // 3. PRUEBAS DE BORRADO LÓGICO
+    // ==========================================
+
+    @Test
+    @DisplayName("Debe realizar la baja lógica del cliente y desactivar sus cuentas asociadas sin eliminar el registro físico")
+    void darDeBaja_ClienteActivo_Exitoso() {
+        ClienteBajaRequestDTO request = ClienteBajaRequestDTO.builder()
+                .id(10L)
+                .motivo("Cancelación voluntaria")
+                .build();
+
+        when(clienteRepository.findById(10L)).thenReturn(Optional.of(clienteMock));
+        when(clienteRepository.save(any(Cliente.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(cuentaRepository.findByClienteId(10L)).thenReturn(List.of(cuentaMock));
+        when(estatusCuentaRepository.findByNombreIgnoreCase("INACTIVA"))
+                .thenReturn(Optional.of(EstatusCuenta.builder().nombre("INACTIVA").build()));
+
+        ClienteResponseDTO response = clienteService.darDeBaja(request);
+
+        assertNotNull(response);
+        assertFalse(response.getActivo());
+        assertNotNull(response.getFechaBaja());
+
+        ArgumentCaptor<Cliente> clienteCaptor = ArgumentCaptor.forClass(Cliente.class);
+        verify(clienteRepository, times(1)).save(clienteCaptor.capture());
+        assertFalse(clienteCaptor.getValue().getActivo());
+        assertNotNull(clienteCaptor.getValue().getFechaBaja());
+
+        assertEquals("INACTIVA", cuentaMock.getEstatusCuenta().getNombre());
+        verify(cuentaRepository, times(1)).save(cuentaMock);
+        verify(clienteRepository, never()).delete(any(Cliente.class));
+        verify(clienteRepository, never()).deleteById(anyLong());
+    }
+
+    @Test
+    @DisplayName("Debe lanzar ClienteNoEncontradoException cuando el ID no existe en la base de datos")
+    void darDeBaja_ClienteInexistente_Lanza404() {
+        ClienteBajaRequestDTO request = ClienteBajaRequestDTO.builder().id(999L).build();
+        when(clienteRepository.findById(999L)).thenReturn(Optional.empty());
+
+        assertThrows(ClienteNoEncontradoException.class, () -> clienteService.darDeBaja(request));
+        verify(clienteRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("Debe lanzar ClienteYaEliminadoException cuando el cliente ya se encontraba dado de baja")
+    void darDeBaja_ClienteYaEliminado_Lanza409() {
+        clienteMock.setActivo(false);
+        clienteMock.setFechaBaja(LocalDateTime.now().minusDays(1));
+
+        ClienteBajaRequestDTO request = ClienteBajaRequestDTO.builder().id(10L).build();
+        when(clienteRepository.findById(10L)).thenReturn(Optional.of(clienteMock));
+
+        assertThrows(ClienteYaEliminadoException.class, () -> clienteService.darDeBaja(request));
+        verify(clienteRepository, never()).save(any());
     }
 }
