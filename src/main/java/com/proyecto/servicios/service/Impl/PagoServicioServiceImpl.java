@@ -22,6 +22,7 @@ import com.proyecto.servicios.service.SegundoFactorService;
 import com.proyecto.servicios.service.SentTxGateway;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -54,6 +55,7 @@ public class PagoServicioServiceImpl implements PagoServicioService {
     private final ObjectProvider<SegundoFactorService> segundoFactorProvider;
     private final ObjectProvider<SentTxGateway> sentTxGatewayProvider;
 
+    @Autowired
     public PagoServicioServiceImpl(CuentaRepository cuentaRepository,
                                    UsuarioRepository usuarioRepository,
                                    GestoPagoProductoRepository productoRepository,
