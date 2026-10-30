@@ -103,13 +103,15 @@ public class BrevoEmailServiceImpl implements EmailService {
         // 3. Fallback simulado para entorno de desarrollo / pruebas
         log.info("Envío de correo simulado exitoso (modo prueba/desarrollo) para cliente={}, destino={}",
                 nombreCliente != null ? nombreCliente : "Cliente", maskedEmail);
+        log.info("🔑 [CÓDIGO 2FA PARA PRUEBAS (DEV)]: [{}] (Válido por {} min para {})",
+                codigoOtp, vigenciaMinutos, destinatario);
     }
 
     private void enviarViaBrevoApi(String destinatario, String nombreCliente, String subject, String body) throws Exception {
         URI uri = URI.create(brevoApiUrl + "/smtp/email");
         HttpURLConnection conn = (HttpURLConnection) uri.toURL().openConnection();
         conn.setRequestMethod("POST");
-        conn.setRequestProperty("api-key", brevoApiKey);
+        conn.setRequestProperty("api-key", brevoApiKey != null ? brevoApiKey.trim() : "");
         conn.setRequestProperty("Content-Type", "application/json");
         conn.setRequestProperty("Accept", "application/json");
         conn.setConnectTimeout(5000);
@@ -132,7 +134,13 @@ public class BrevoEmailServiceImpl implements EmailService {
         if (statusCode >= 200 && statusCode < 300) {
             log.debug("Respuesta exitosa de Brevo API HTTP {}", statusCode);
         } else {
-            throw new RuntimeException("Brevo API respondió con código HTTP " + statusCode);
+            String errorDetail = "";
+            try (java.io.InputStream es = conn.getErrorStream()) {
+                if (es != null) {
+                    errorDetail = " - Detalle: " + new String(es.readAllBytes(), StandardCharsets.UTF_8);
+                }
+            } catch (Exception ignored) {}
+            throw new RuntimeException("Brevo API respondió con código HTTP " + statusCode + errorDetail);
         }
     }
 

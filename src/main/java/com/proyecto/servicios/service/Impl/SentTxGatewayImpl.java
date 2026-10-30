@@ -66,6 +66,9 @@ public class SentTxGatewayImpl implements SentTxGateway {
     @Value("${gestopago.senttx.api-key:}")
     private String apiKey;
 
+    @Value("${gestopago.simulacion.exitosa:false}")
+    private boolean simulacionExitosa;
+
     public SentTxGatewayImpl(GestoPagoSentTxClient sentTxClient,
                              AesCipherService aesCipherService,
                              GestoPagoTokenService tokenService,
@@ -105,6 +108,19 @@ public class SentTxGatewayImpl implements SentTxGateway {
                 .estado("PENDIENTE")
                 .build();
         transaccionRepository.save(tx);
+
+        if (simulacionExitosa) {
+            log.info("ℹ️ [MODO SIMULACIÓN ACTIVO] Simulando respuesta exitosa del proveedor GestoPago para upc={}", upc);
+            actualizarTransaccion(tx, "APLICADO", CODIGO_PROVEEDOR_EXITO, "Transacción aplicada exitosamente (Modo Simulación).");
+            return PagoServicioResponse.builder()
+                    .estado(EstadoPagoServicio.APLICADO)
+                    .upc(upc)
+                    .idServicio(pago.idServicio())
+                    .idProducto(pago.idProducto())
+                    .monto(pago.monto())
+                    .mensaje("Pago aplicado exitosamente.")
+                    .build();
+        }
 
         String respuestaRaw;
         try {
@@ -165,6 +181,18 @@ public class SentTxGatewayImpl implements SentTxGateway {
         }
 
         log.info("Consultando confirmTx.do para transacción upc={}", upc);
+
+        if (simulacionExitosa) {
+            actualizarTransaccion(tx, "APLICADO", CODIGO_PROVEEDOR_EXITO, "Transacción confirmada exitosamente (Modo Simulación).");
+            return PagoServicioResponse.builder()
+                    .estado(EstadoPagoServicio.APLICADO)
+                    .upc(upc)
+                    .idServicio(tx.getIdServicio())
+                    .idProducto(tx.getIdProducto())
+                    .monto(tx.getMonto())
+                    .mensaje("Resultado de conciliación para UPC " + upc + ": APLICADO")
+                    .build();
+        }
 
         String payloadJson = construirPayloadConfirmTxJson(upc);
         String payloadCifrado = aesCipherService.cifrar(payloadJson);
