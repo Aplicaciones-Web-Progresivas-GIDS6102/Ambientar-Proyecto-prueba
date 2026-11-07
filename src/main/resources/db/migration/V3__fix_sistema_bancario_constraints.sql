@@ -1,0 +1,7 @@
+-- =============================================================================
+-- MIGRACIÓN V3: AJUSTES Y RESTRICCIONES ESTRUCTURALES DEL SISTEMA BANCARIO
+-- =============================================================================
+-- Nota: Todas las restricciones de longitud, tipos de datos, llaves foráneas
+-- e índices optimizados han sido incorporadas directamente dentro de la
+-- migración V2.
+-- =============================================================================

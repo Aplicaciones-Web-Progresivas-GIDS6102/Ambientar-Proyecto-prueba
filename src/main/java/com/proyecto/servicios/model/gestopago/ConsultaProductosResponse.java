@@ -8,11 +8,11 @@ import lombok.NoArgsConstructor;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * DTO para la respuesta estandarizada de la API de Productos.
- * Asegura que NINGÚN campo sea devuelto como nulo (No nulos),
- * inicializando siempre las listas y las cadenas con valores por defecto.
- */
+
+ //DTO para la respuesta estandarizada de la API de Productos.
+ //Asegura que NINGÚN campo sea devuelto como nulo (No nulos),
+ //inicializando siempre las listas y las cadenas con valores por defecto.
+
 @Data
 @Builder
 @NoArgsConstructor
