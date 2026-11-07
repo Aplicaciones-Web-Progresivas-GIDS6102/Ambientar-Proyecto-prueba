@@ -1,120 +1,183 @@
 package com.proyecto.servicios.config;
 
+import com.fasterxml.jackson.core.JsonParseException;
+import com.fasterxml.jackson.databind.exc.InvalidFormatException;
+import com.fasterxml.jackson.databind.exc.MismatchedInputException;
 import com.proyecto.servicios.exception.*;
-import com.proyecto.servicios.model.ErrorResponse;
-import com.proyecto.servicios.model.gestopago.ConsultaProductosRequest;
-import com.proyecto.servicios.model.gestopago.ConsultaProductosResponse;
+import com.proyecto.servicios.model.GenericResponse;
+import jakarta.persistence.EntityNotFoundException;
+import jakarta.validation.ConstraintViolation;
+import jakarta.validation.ConstraintViolationException;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.validation.FieldError;
+import org.springframework.validation.ObjectError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
-import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.stream.Collectors;
-import com.fasterxml.jackson.databind.exc.InvalidFormatException;
-import com.fasterxml.jackson.databind.exc.MismatchedInputException;
-import com.fasterxml.jackson.core.JsonParseException;
-import jakarta.validation.ConstraintViolationException;
+import java.util.HashMap;
+import java.util.Map;
 
 /**
- * Manejador global de excepciones desacoplado y estandarizado con respuestas HTTP precisas.
+ * Manejador global de excepciones centralizado con respuestas semánticas y uniformes
+ * basadas en el estándar GenericResponse y el patrón ValidadorCampos.
+ * Evita la exposición de trazas de error internas o detalles de base de datos a clientes externos.
  */
 @RestControllerAdvice
 @Slf4j
 public class GlobalExceptionHandler {
 
     @ExceptionHandler(ClienteNoEncontradoException.class)
-    public ResponseEntity<ErrorResponse> handleClienteNoEncontrado(ClienteNoEncontradoException ex) {
+    public ResponseEntity<GenericResponse> handleClienteNoEncontrado(ClienteNoEncontradoException ex) {
         log.warn("Cliente no encontrado: {}", ex.getMessage());
-        return buildResponse(HttpStatus.NOT_FOUND, "404", ex.getMessage());
+        return buildResponse(HttpStatus.NOT_FOUND, 404, ex.getMessage());
     }
 
     @ExceptionHandler(CuentaNoEncontradaException.class)
-    public ResponseEntity<ErrorResponse> handleCuentaNoEncontrada(CuentaNoEncontradaException ex) {
+    public ResponseEntity<GenericResponse> handleCuentaNoEncontrada(CuentaNoEncontradaException ex) {
         log.warn("Cuenta no encontrada: {}", ex.getMessage());
-        return buildResponse(HttpStatus.NOT_FOUND, "404", ex.getMessage());
+        return buildResponse(HttpStatus.NOT_FOUND, 404, ex.getMessage());
     }
 
     @ExceptionHandler(UsuarioNoEncontradoException.class)
-    public ResponseEntity<ErrorResponse> handleUsuarioNoEncontrado(UsuarioNoEncontradoException ex) {
+    public ResponseEntity<GenericResponse> handleUsuarioNoEncontrado(UsuarioNoEncontradoException ex) {
         log.warn("Usuario no encontrado: {}", ex.getMessage());
-        return buildResponse(HttpStatus.NOT_FOUND, "404", ex.getMessage());
+        return buildResponse(HttpStatus.NOT_FOUND, 404, ex.getMessage());
     }
 
-    @ExceptionHandler({ClienteYaExisteException.class, CurpDuplicadaException.class, RfcDuplicadoException.class, UsuarioYaExisteException.class})
-    public ResponseEntity<ErrorResponse> handleConflictosExistencia(RuntimeException ex) {
-        log.warn("Conflicto de duplicidad en entidad: {}", ex.getMessage());
-        return buildResponse(HttpStatus.CONFLICT, "409", ex.getMessage());
+    @ExceptionHandler(EntityNotFoundException.class)
+    public ResponseEntity<GenericResponse> handleEntityNotFound(EntityNotFoundException ex) {
+        log.warn("Entidad JPA no encontrada: {}", ex.getMessage());
+        return buildResponse(HttpStatus.NOT_FOUND, 404, "El recurso solicitado no fue encontrado.");
+    }
+
+    @ExceptionHandler({
+            ClienteYaExisteException.class,
+            CurpDuplicadaException.class,
+            RfcDuplicadoException.class,
+            UsuarioYaExisteException.class,
+            ClienteYaEliminadoException.class
+    })
+    public ResponseEntity<GenericResponse> handleConflictosExistencia(RuntimeException ex) {
+        log.warn("Conflicto de estado o duplicidad en la entidad: {}", ex.getMessage());
+        return buildResponse(HttpStatus.CONFLICT, 409, ex.getMessage());
     }
 
     @ExceptionHandler({CredencialesInvalidasException.class, BadCredentialsException.class, SesionExpiradaException.class})
-    public ResponseEntity<ErrorResponse> handleAutenticacion(RuntimeException ex) {
+    public ResponseEntity<GenericResponse> handleAutenticacion(RuntimeException ex) {
         log.warn("Falla de autenticación/sesión: {}", ex.getMessage());
-        return buildResponse(HttpStatus.UNAUTHORIZED, "401", ex.getMessage());
+        return buildResponse(HttpStatus.UNAUTHORIZED, 401, ex.getMessage());
     }
 
     @ExceptionHandler(AccessDeniedException.class)
-    public ResponseEntity<ErrorResponse> handleAccesoDenegado(AccessDeniedException ex) {
+    public ResponseEntity<GenericResponse> handleAccesoDenegado(AccessDeniedException ex) {
         log.warn("Acceso denegado: {}", ex.getMessage());
-        return buildResponse(HttpStatus.FORBIDDEN, "403", "No cuenta con los permisos necesarios para acceder a este recurso.");
+        return buildResponse(HttpStatus.FORBIDDEN, 403, "No cuenta con los permisos necesarios para acceder a este recurso.");
     }
 
     @ExceptionHandler(ValidacionNegocioException.class)
-    public ResponseEntity<ErrorResponse> handleValidacionNegocio(ValidacionNegocioException ex) {
+    public ResponseEntity<GenericResponse> handleValidacionNegocio(ValidacionNegocioException ex) {
         log.warn("Falla de regla de negocio: {}", ex.getMessage());
-        return buildResponse(HttpStatus.BAD_REQUEST, "400", ex.getMessage());
+        return buildResponse(HttpStatus.BAD_REQUEST, 400, ex.getMessage());
     }
 
+    @ExceptionHandler(CuentaNoAutorizadaException.class)
+    public ResponseEntity<GenericResponse> handleCuentaNoAutorizada(CuentaNoAutorizadaException ex) {
+        log.warn("Cuenta no autorizada: {}", ex.getMessage());
+        return buildResponse(HttpStatus.FORBIDDEN, 403, ex.getMessage());
+    }
+
+    @ExceptionHandler(SegundoFactorInvalidoException.class)
+    public ResponseEntity<GenericResponse> handleSegundoFactorInvalido(SegundoFactorInvalidoException ex) {
+        log.warn("Segunda autenticación rechazada");
+        return buildResponse(HttpStatus.UNAUTHORIZED, 401, ex.getMessage());
+    }
+
+    @ExceptionHandler(ProductoNoValidoException.class)
+    public ResponseEntity<GenericResponse> handleProductoNoValido(ProductoNoValidoException ex) {
+        log.warn("Producto/servicio no válido: {}", ex.getMessage());
+        return buildResponse(HttpStatus.BAD_REQUEST, 400, ex.getMessage());
+    }
+
+    @ExceptionHandler(SaldoInsuficienteException.class)
+    public ResponseEntity<GenericResponse> handleSaldoInsuficiente(SaldoInsuficienteException ex) {
+        log.warn("Saldo insuficiente");
+        return buildResponse(HttpStatus.UNPROCESSABLE_ENTITY, 422, ex.getMessage());
+    }
+
+    @ExceptionHandler(IntegracionNoDisponibleException.class)
+    public ResponseEntity<GenericResponse> handleIntegracionNoDisponible(IntegracionNoDisponibleException ex) {
+        log.error("Integración no disponible: {}", ex.getMessage());
+        return buildResponse(HttpStatus.SERVICE_UNAVAILABLE, 503, ex.getMessage());
+    }
+
+    @ExceptionHandler(OperacionDuplicadaException.class)
+    public ResponseEntity<GenericResponse> handleOperacionDuplicada(OperacionDuplicadaException ex) {
+        log.warn("Operación duplicada detectada: {}", ex.getMessage());
+        return buildResponse(HttpStatus.CONFLICT, 409, ex.getMessage());
+    }
+
+    @ExceptionHandler(CifradoException.class)
+    public ResponseEntity<GenericResponse> handleCifradoException(CifradoException ex) {
+        log.error("Error criptográfico en la operación: {}", ex.getMessage());
+        return buildResponse(HttpStatus.INTERNAL_SERVER_ERROR, 500, "Error en el procesamiento seguro de la transacción.");
+    }
+
+    @ExceptionHandler(XmlParsingException.class)
+    public ResponseEntity<GenericResponse> handleXmlParsingException(XmlParsingException ex) {
+        log.error("Error al procesar respuesta XML del proveedor: {}", ex.getMessage());
+        return buildResponse(HttpStatus.BAD_GATEWAY, 502, "Respuesta con formato no válido del proveedor externo.");
+    }
+
+    @ExceptionHandler(ProveedorPagoException.class)
+    public ResponseEntity<GenericResponse> handleProveedorPago(ProveedorPagoException ex) {
+        log.warn("Rechazo del proveedor de pagos: {}", ex.getMessage());
+        return buildResponse(HttpStatus.UNPROCESSABLE_ENTITY, 422, ex.getMessage());
+    }
+
+    /**
+     * Estandarización de validaciones DTO al estilo ValidadorCampos.
+     * Retorna ResponseEntity<GenericResponse> con HttpStatus.BAD_REQUEST,
+     * codigo 1 y mensaje: "Datos no validos: " + listError.
+     */
     @ExceptionHandler(MethodArgumentNotValidException.class)
-    public ResponseEntity<?> handleValidationExceptions(MethodArgumentNotValidException ex) {
-        List<String> errores = new ArrayList<>();
-        StringBuilder sb = new StringBuilder();
+    public ResponseEntity<GenericResponse> dtoValidation(MethodArgumentNotValidException exception) {
+        GenericResponse genericResponse = new GenericResponse();
+        Map<String, String> listError = new HashMap<>();
 
-        for (FieldError fieldError : ex.getBindingResult().getFieldErrors()) {
-            if (sb.length() > 0) {
-                sb.append(" | ");
-            }
-            String msg = fieldError.getDefaultMessage();
-            sb.append(msg);
-            errores.add(fieldError.getField() + ": " + msg);
+        for (FieldError fieldError : exception.getBindingResult().getFieldErrors()) {
+            listError.merge(
+                    fieldError.getField(),
+                    fieldError.getDefaultMessage() != null ? fieldError.getDefaultMessage() : "Dato no válido",
+                    (m1, m2) -> m1 + "; " + m2
+            );
         }
 
-        String mensajeError = sb.length() > 0 ? sb.toString() : "Error en los parámetros de entrada de la petición.";
-        log.warn("Falla de validación en Request: {}", mensajeError);
-
-        // Compatibilidad Legacy para GestoPago (mantiene HTTP 200 OK con DTO ConsultaProductosResponse)
-        if (ex.getBindingResult().getTarget() instanceof ConsultaProductosRequest) {
-            ConsultaProductosResponse legacyResponse = ConsultaProductosResponse.builder()
-                    .codigo("400")
-                    .mensaje(mensajeError)
-                    .productos(new ArrayList<>())
-                    .build();
-            return new ResponseEntity<>(legacyResponse, HttpStatus.OK);
+        for (ObjectError globalError : exception.getBindingResult().getGlobalErrors()) {
+            listError.merge(
+                    globalError.getObjectName(),
+                    globalError.getDefaultMessage() != null ? globalError.getDefaultMessage() : "Dato no válido",
+                    (m1, m2) -> m1 + "; " + m2
+            );
         }
 
-        // Estándar REST para el resto de la aplicación (HTTP 400 Bad Request)
-        ErrorResponse errorResponse = ErrorResponse.builder()
-                .codigo("400")
-                .mensaje("Error de validación en los parámetros de entrada.")
-                .estado(HttpStatus.BAD_REQUEST.value())
-                .timestamp(LocalDateTime.now())
-                .detalles(errores)
-                .build();
+        genericResponse.setCodigo(1);
+        genericResponse.setMensaje("Datos no validos: " + listError);
 
-        return new ResponseEntity<>(errorResponse, HttpStatus.BAD_REQUEST);
+        log.warn("Falla de validación en Request DTO: {}", genericResponse.getMensaje());
+        return new ResponseEntity<>(genericResponse, HttpStatus.BAD_REQUEST);
     }
 
-    @ExceptionHandler(org.springframework.http.converter.HttpMessageNotReadableException.class)
-    public ResponseEntity<ErrorResponse> handleHttpMessageNotReadable(org.springframework.http.converter.HttpMessageNotReadableException ex) {
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<GenericResponse> handleHttpMessageNotReadable(HttpMessageNotReadableException ex) {
         log.warn("Solicitud JSON mal formada o no legible: {}", ex.getMessage());
-        List<String> detalles = new ArrayList<>();
+        String mensaje = "El cuerpo de la solicitud JSON es inválido o contiene tipos de datos incorrectos.";
 
         Throwable cause = ex.getCause();
         if (cause instanceof InvalidFormatException ife) {
@@ -123,71 +186,63 @@ public class GlobalExceptionHandler {
                     .filter(java.util.Objects::nonNull)
                     .reduce((first, second) -> second)
                     .orElse("solicitud");
-            detalles.add(fieldName + ": El valor '" + ife.getValue() + "' no tiene un formato o tipo de dato válido.");
+            mensaje = "El campo '" + fieldName + "' tiene un formato o tipo de dato inválido: '" + ife.getValue() + "'.";
         } else if (cause instanceof MismatchedInputException mie) {
             String fieldName = mie.getPath().stream()
                     .map(com.fasterxml.jackson.databind.JsonMappingException.Reference::getFieldName)
                     .filter(java.util.Objects::nonNull)
                     .reduce((first, second) -> second)
                     .orElse("solicitud");
-            detalles.add(fieldName + ": El tipo de dato proporcionado es inválido.");
+            mensaje = "El tipo de dato proporcionado para el campo '" + fieldName + "' es inválido.";
         } else if (cause instanceof JsonParseException) {
-            detalles.add("Sintaxis JSON inválida o mal formada. Verifique las comas, comillas y llaves del JSON.");
-        } else {
-            detalles.add("El cuerpo de la solicitud JSON es inválido o está mal formado. Verifique la sintaxis JSON.");
+            mensaje = "Sintaxis JSON inválida o mal formada. Verifique las comas, comillas y llaves del JSON.";
         }
 
-        ErrorResponse errorResponse = ErrorResponse.builder()
-                .codigo("400")
-                .mensaje("El cuerpo de la solicitud JSON es inválido o contiene tipos de datos incorrectos.")
-                .estado(HttpStatus.BAD_REQUEST.value())
-                .timestamp(LocalDateTime.now())
-                .detalles(detalles)
-                .build();
-
-        return new ResponseEntity<>(errorResponse, HttpStatus.BAD_REQUEST);
+        return buildResponse(HttpStatus.BAD_REQUEST, 400, mensaje);
     }
 
     @ExceptionHandler(ConstraintViolationException.class)
-    public ResponseEntity<ErrorResponse> handleConstraintViolation(ConstraintViolationException ex) {
-        List<String> detalles = ex.getConstraintViolations().stream()
-                .map(cv -> cv.getPropertyPath() + ": " + cv.getMessage())
-                .collect(Collectors.toList());
+    public ResponseEntity<GenericResponse> handleConstraintViolation(ConstraintViolationException ex) {
+        log.warn("Violación de restricciones de validación: {}", ex.getMessage());
+        GenericResponse genericResponse = new GenericResponse();
+        Map<String, String> listError = new HashMap<>();
 
-        ErrorResponse errorResponse = ErrorResponse.builder()
-                .codigo("400")
-                .mensaje("Error de validación en los parámetros de la solicitud.")
-                .estado(HttpStatus.BAD_REQUEST.value())
-                .timestamp(LocalDateTime.now())
-                .detalles(detalles)
-                .build();
+        for (ConstraintViolation<?> violation : ex.getConstraintViolations()) {
+            String property = violation.getPropertyPath() != null ? violation.getPropertyPath().toString() : "parametro";
+            listError.merge(
+                    property,
+                    violation.getMessage() != null ? violation.getMessage() : "Dato no válido",
+                    (m1, m2) -> m1 + "; " + m2
+            );
+        }
 
-        return new ResponseEntity<>(errorResponse, HttpStatus.BAD_REQUEST);
+        genericResponse.setCodigo(1);
+        genericResponse.setMensaje("Datos no validos: " + listError);
+
+        return new ResponseEntity<>(genericResponse, HttpStatus.BAD_REQUEST);
     }
 
-    @ExceptionHandler(org.springframework.dao.DataIntegrityViolationException.class)
-    public ResponseEntity<ErrorResponse> handleDataIntegrityViolation(org.springframework.dao.DataIntegrityViolationException ex) {
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<GenericResponse> handleDataIntegrityViolation(DataIntegrityViolationException ex) {
         log.error("Violación de integridad de datos en BD: {}", ex.getMessage());
-        String mensaje = "Error de integridad de datos en la base de datos.";
-        if (ex.getCause() != null && ex.getCause().getMessage() != null) {
-            mensaje += " Detalles: " + ex.getCause().getMessage();
-        }
-        return buildResponse(HttpStatus.BAD_REQUEST, "400", mensaje);
+        return buildResponse(
+                HttpStatus.CONFLICT,
+                409,
+                "Conflicto de integridad: ya existe un registro con información duplicada o incompatible en el sistema."
+        );
     }
 
     @ExceptionHandler(Exception.class)
-    public ResponseEntity<ErrorResponse> handleGenericException(Exception ex) {
+    public ResponseEntity<GenericResponse> handleGenericException(Exception ex) {
         log.error("Excepción no controlada en el sistema: {}", ex.getMessage(), ex);
-        return buildResponse(HttpStatus.INTERNAL_SERVER_ERROR, "500", "Ocurrió un error inesperado al procesar la solicitud.");
+        return buildResponse(HttpStatus.INTERNAL_SERVER_ERROR, 500, "Ocurrió un error inesperado al procesar la solicitud.");
     }
 
-    private ResponseEntity<ErrorResponse> buildResponse(HttpStatus status, String codigo, String mensaje) {
-        ErrorResponse errorResponse = ErrorResponse.builder()
+    private ResponseEntity<GenericResponse> buildResponse(HttpStatus status, Integer codigo, String mensaje) {
+        GenericResponse genericResponse = GenericResponse.builder()
                 .codigo(codigo)
                 .mensaje(mensaje)
-                .estado(status.value())
-                .timestamp(LocalDateTime.now())
                 .build();
-        return new ResponseEntity<>(errorResponse, status);
+        return new ResponseEntity<>(genericResponse, status);
     }
 }

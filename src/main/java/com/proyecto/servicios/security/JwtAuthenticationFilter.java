@@ -24,6 +24,8 @@ import java.util.Optional;
 
 /**
  * Filtro de Seguridad JWT con control estricto de inactividad de 5 minutos.
+ * Protege todas las rutas de negocio y pagos, exceptuando endpoints públicos de autenticación,
+ * onboarding y consulta de catálogo de productos.
  */
 @Component
 @RequiredArgsConstructor
@@ -41,14 +43,15 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         String path = request.getRequestURI();
         String method = request.getMethod();
 
-        // Rutas públicas de Autenticación, Swagger y GestoPago
+        // Rutas públicas de Autenticación, Swagger y catálogo de productos GestoPago
         if (path.startsWith("/auth/") ||
             path.startsWith("/v3/api-docs") ||
             path.startsWith("/swagger-ui") ||
             path.startsWith("/swagger-resources") ||
             path.startsWith("/webjars") ||
-            path.startsWith("/gestopago") ||
-            path.startsWith("/api/v1/gestopago") ||
+            path.startsWith("/api/v1/gestopago/productos") ||
+            path.startsWith("/gestopago/productos") ||
+            path.startsWith("/api/v1/gestopago/sincronizar") ||
             path.startsWith("/api/v1/productos")) {
             return true;
         }
