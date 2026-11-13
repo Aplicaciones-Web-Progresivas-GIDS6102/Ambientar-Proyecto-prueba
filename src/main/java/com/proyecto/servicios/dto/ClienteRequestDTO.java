@@ -56,7 +56,7 @@ public class ClienteRequestDTO {
     private String rfc;
 
     @NotBlank(message = "El sexo es obligatorio.")
-    @Pattern(regexp = "^(?i)(M|F|X|HOMBRE|MUJER|MASCULINO|FEMENINO|H|M)$", message = "El sexo es inválido. Debe ser M, F o X.")
+    @Pattern(regexp = "^(?i)(M|F|X|HOMBRE|MUJER|MASCULINO|FEMENINO|H)$", message = "El sexo es inválido. Debe ser M, F o X.")
     private String sexo;
 
     private Long nacionalidadId;

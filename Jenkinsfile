@@ -1,9 +1,13 @@
-
 pipeline {
     agent any
 
     tools {
         jdk 'JDK21'
+    }
+
+    environment {
+        SONAR_PROJECT_KEY = 'ambientar-proyecto-prueba'
+        SONAR_PROJECT_NAME = 'Ambientar-Proyecto-prueba'
     }
 
     options {
@@ -13,14 +17,14 @@ pipeline {
 
     stages {
 
-        stage('Descargar codigo') {
+        stage('Clonar repositorio') {
             steps {
-                echo 'Descargando proyecto desde GitHub'
-                checkout scm
+                git branch: 'develop',
+                    url: 'https://github.com/Aplicaciones-Web-Progresivas-GIDS6102/Ambientar-Proyecto-prueba.git'
             }
         }
 
-        stage('Verificar Java y Gradle') {
+        stage('Verificar entorno') {
             steps {
                 sh '''
                     java -version
@@ -32,15 +36,15 @@ pipeline {
 
         stage('Compilar y ejecutar pruebas') {
             steps {
-                sh './gradlew clean test jacocoTestReport'
+                sh './gradlew clean test jacocoTestReport jacocoTestCoverageVerification'
             }
             post {
                 always {
                     junit allowEmptyResults: true,
-                          testResults: '**/build/test-results/test/*.xml'
+                        testResults: '**/build/test-results/test/*.xml'
 
                     archiveArtifacts allowEmptyArchive: true,
-                        artifacts: 'build/reports/tests/test/**,build/reports/jacoco/test/**'
+                        artifacts: '**/build/reports/**'
                 }
             }
         }
@@ -52,7 +56,8 @@ pipeline {
                         ./gradlew sonar \
                           -Dsonar.projectKey=ambientar-proyecto-prueba \
                           -Dsonar.projectName=Ambientar-Proyecto-prueba \
-                          -Dsonar.coverage.jacoco.xmlReportPaths=build/reports/jacoco/test/jacocoTestReport.xml
+                          -Dsonar.coverage.jacoco.xmlReportPaths=build/reports/jacoco/test/jacocoTestReport.xml \
+                          -Dsonar.coverage.exclusions="**/App.java,**/config/**,**/dto/**,**/entity/**,**/enums/**,**/exception/**,**/mapper/**,**/model/**,**/client/**,**/repositorys/**"
                     '''
                 }
             }
@@ -69,10 +74,15 @@ pipeline {
 
     post {
         success {
-            echo 'Pipeline terminado correctamente.'
+            echo 'Proyecto compilado y analizado correctamente en SonarQube.'
         }
+
         failure {
-            echo 'El pipeline fallo. Revisar la consola de Jenkins.'
+            echo 'Error en el pipeline. Revisar Console Output.'
+        }
+
+        always {
+            echo 'Finalizo la ejecucion del pipeline.'
         }
     }
 }

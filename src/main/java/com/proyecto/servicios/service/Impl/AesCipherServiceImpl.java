@@ -64,6 +64,7 @@ public class AesCipherServiceImpl implements AesCipherService {
     }
 
     @Override
+    @SuppressWarnings("java:S5542") // Requerido por especificacion estricta del proveedor externo SentTx
     public String cifrar(String textoPlano) {
         if (textoPlano == null) {
             throw new IllegalArgumentException("El texto a cifrar no puede ser nulo.");
@@ -86,6 +87,7 @@ public class AesCipherServiceImpl implements AesCipherService {
     }
 
     @Override
+    @SuppressWarnings("java:S5542") // Requerido por especificacion estricta del proveedor externo SentTx
     public String descifrar(String textoCifrado) {
         if (textoCifrado == null) {
             throw new IllegalArgumentException("El texto a descifrar no puede ser nulo.");
