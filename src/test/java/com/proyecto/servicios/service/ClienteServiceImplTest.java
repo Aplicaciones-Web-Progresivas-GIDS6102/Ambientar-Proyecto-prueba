@@ -335,4 +335,63 @@ class ClienteServiceImplTest {
         ClienteResponseDTO resp = clienteService.crearCliente(requestDTO);
         assertNotNull(resp);
     }
+
+    @Test
+    @DisplayName("Crear cliente con nacionalidad 'MEXICANO' y estado civil 'CASADO' creando registros nuevos")
+    void crearCliente_ConNacionalidadMexicanoYEstadoCivilCasado() {
+        requestDTO.setNacionalidadId(null);
+        requestDTO.setNacionalidad("MEXICANO");
+        requestDTO.setEstadoCivilId(null);
+        requestDTO.setEstadoCivil("CASADO");
+
+        when(paisRepository.findByNombreIgnoreCase("MÉXICO")).thenReturn(Optional.empty());
+        when(paisRepository.findByCodigoIsoIgnoreCase("MÉX")).thenReturn(Optional.empty());
+        when(paisRepository.save(any(Pais.class))).thenReturn(paisMock);
+
+        when(estadoCivilRepository.findByDescripcionIgnoreCase("CASADO")).thenReturn(Optional.empty());
+        when(estadoCivilRepository.findByDescripcionIgnoreCase("CASADO(A)")).thenReturn(Optional.empty());
+        when(estadoCivilRepository.save(any(EstadoCivil.class))).thenReturn(estadoCivilMock);
+
+        when(cuentaService.crearCuentaParaCliente(any(Cliente.class))).thenReturn(cuentaMock);
+        when(clienteRepository.save(any(Cliente.class))).thenReturn(clienteMock);
+
+        ClienteResponseDTO resp = clienteService.crearCliente(requestDTO);
+        assertNotNull(resp);
+        verify(paisRepository, atLeastOnce()).save(any(Pais.class));
+        verify(estadoCivilRepository, atLeastOnce()).save(any(EstadoCivil.class));
+    }
+
+    @Test
+    @DisplayName("Crear cliente con estado civil 'DIVORCIADO' y 'VIUDO'")
+    void crearCliente_ConEstadoCivilDivorciadoYViudo() {
+        requestDTO.setNacionalidad("ESP");
+        requestDTO.setEstadoCivil("DIVORCIADO");
+
+        when(paisRepository.findByNombreIgnoreCase("ESP")).thenReturn(Optional.empty());
+        when(paisRepository.findByCodigoIsoIgnoreCase("ESP")).thenReturn(Optional.of(paisMock));
+
+        when(estadoCivilRepository.findByDescripcionIgnoreCase("DIVORCIADO")).thenReturn(Optional.empty());
+        when(estadoCivilRepository.findByDescripcionIgnoreCase("DIVORCIADO(A)")).thenReturn(Optional.of(estadoCivilMock));
+
+        when(cuentaService.crearCuentaParaCliente(any(Cliente.class))).thenReturn(cuentaMock);
+        when(clienteRepository.save(any(Cliente.class))).thenReturn(clienteMock);
+
+        ClienteResponseDTO resp = clienteService.crearCliente(requestDTO);
+        assertNotNull(resp);
+    }
+
+    @Test
+    @DisplayName("Dar de baja cuando estatus INACTIVA no existe en BD y se crea automáticamente")
+    void darDeBaja_CreaEstatusInactivaSiNoExiste() {
+        ClienteBajaRequestDTO request = ClienteBajaRequestDTO.builder().id(10L).build();
+        when(clienteRepository.findById(10L)).thenReturn(Optional.of(clienteMock));
+        when(clienteRepository.save(any(Cliente.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(cuentaRepository.findByClienteId(10L)).thenReturn(List.of(cuentaMock));
+        when(estatusCuentaRepository.findByNombreIgnoreCase("INACTIVA")).thenReturn(Optional.empty());
+        when(estatusCuentaRepository.save(any(EstatusCuenta.class))).thenReturn(EstatusCuenta.builder().nombre("INACTIVA").build());
+
+        ClienteResponseDTO response = clienteService.darDeBaja(request);
+        assertNotNull(response);
+        verify(estatusCuentaRepository, times(1)).save(any(EstatusCuenta.class));
+    }
 }

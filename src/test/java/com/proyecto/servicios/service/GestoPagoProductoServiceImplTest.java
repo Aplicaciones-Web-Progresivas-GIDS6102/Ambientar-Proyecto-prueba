@@ -211,4 +211,53 @@ class GestoPagoProductoServiceImplTest {
         assertEquals("Desde cache", response.getMensaje());
         verify(gestoPagoProductClient, never()).getProductList(anyString());
     }
+
+    @Test
+    @DisplayName("Modo offline retorna error 500 cuando la base de datos de respaldo falla")
+    void sincronizarProductos_Offline_FallaBd_Retorna500() {
+        when(gestoPagoProductClient.getProductList(anyString())).thenThrow(new RuntimeException("Network down"));
+        when(gestoPagoProductoRepository.findAll()).thenThrow(new RuntimeException("PostgreSQL connection error"));
+
+        ConsultaProductosResponse response = productoService.sincronizarProductos();
+
+        assertNotNull(response);
+        assertEquals("500", response.getCodigo());
+        assertTrue(response.getMensaje().contains("Error al acceder a la base de datos de respaldo"));
+    }
+
+    private GestoPagoProductXmlResponse mockXmlResponse() {
+        return new GestoPagoProductXmlResponse(
+                new MensajeXml("01", "Operación realizada con éxito"),
+                new ProductosWrapper(List.of(
+                        new ProductoXml("SERIVCIO_1", "PROD 1", "2", "2", "1", "1", "false", "200.0", "false", "a", "legend")
+                ))
+        );
+    }
+
+    @Test
+    @DisplayName("Falla al guardar en Redis cache se maneja silenciosamente sin interrumpir el flujo")
+    void sincronizarProductos_FallaRedis_ContinuaExitoso() {
+        when(gestoPagoProductClient.getProductList(anyString())).thenReturn(mockXmlResponse());
+        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+        doThrow(new RuntimeException("Redis connection pool exhausted"))
+                .when(valueOperations).set(anyString(), any(), any());
+
+        ConsultaProductosResponse response = productoService.sincronizarProductos();
+
+        assertNotNull(response);
+        assertEquals("01", response.getCodigo());
+    }
+
+    @Test
+    @DisplayName("Falla al obtener token dinámico recurre al token configurado")
+    void sincronizarProductos_FallaTokenDinamico_UsaConfigurado() {
+        when(gestoPagoTokenService.obtenerTokenActivo(anyInt(), anyString()))
+                .thenThrow(new RuntimeException("Timeout DB tokens"));
+        when(gestoPagoProductClient.getProductList(anyString())).thenReturn(mockXmlResponse());
+
+        ConsultaProductosResponse response = productoService.sincronizarProductos();
+
+        assertNotNull(response);
+        assertEquals("01", response.getCodigo());
+    }
 }

@@ -249,4 +249,54 @@ class PagoServicioServiceImplTest {
         assertThatThrownBy(() -> service.pagarServicio(request(), USERNAME)).isInstanceOf(IntegracionNoDisponibleException.class);
         verify(gateway, times(1)).enviar(any());
     }
+
+    @Test
+    void conciliarTransaccion_Exitoso() {
+        when(gateway.confirmar("UPC1")).thenReturn(PagoServicioResponse.builder()
+                .estado(EstadoPagoServicio.APLICADO).upc("UPC1").build());
+
+        PagoServicioResponse resp = service.conciliarTransaccion("UPC1");
+        assertThat(resp.getEstado()).isEqualTo(EstadoPagoServicio.APLICADO);
+    }
+
+    @Test
+    void conciliarTransaccion_SinGateway_LanzaExcepcion() {
+        when(gatewayProvider.getIfAvailable()).thenReturn(null);
+        assertThatThrownBy(() -> service.conciliarTransaccion("UPC1"))
+                .isInstanceOf(IntegracionNoDisponibleException.class);
+    }
+
+    @Test
+    void descontarSaldo_ArgumentosNulos() {
+        service.descontarSaldo(null, null);
+        service.descontarSaldo(cuenta, null);
+    }
+
+    @Test
+    void descontarSaldo_SaldoInsuficiente_LanzaExcepcion() {
+        cuenta.getSaldo().setSaldoDisponible(new BigDecimal("10.00"));
+        assertThatThrownBy(() -> service.descontarSaldo(cuenta, new BigDecimal("100.00")))
+                .isInstanceOf(SaldoInsuficienteException.class);
+    }
+
+    @Test
+    void usuarioBloqueado_LanzaCuentaNoAutorizadaException() {
+        usuario.setBloqueado(true);
+        assertThatThrownBy(() -> service.pagarServicio(request(), USERNAME))
+                .isInstanceOf(CuentaNoAutorizadaException.class);
+    }
+
+    @Test
+    void clienteInactivo_LanzaCuentaNoAutorizadaException() {
+        cliente.setActivo(false);
+        assertThatThrownBy(() -> service.pagarServicio(request(), USERNAME))
+                .isInstanceOf(CuentaNoAutorizadaException.class);
+    }
+
+    @Test
+    void estatusCuentaInactivo_LanzaCuentaNoAutorizadaException() {
+        cuenta.getEstatusCuenta().setActivo(false);
+        assertThatThrownBy(() -> service.pagarServicio(request(), USERNAME))
+                .isInstanceOf(CuentaNoAutorizadaException.class);
+    }
 }

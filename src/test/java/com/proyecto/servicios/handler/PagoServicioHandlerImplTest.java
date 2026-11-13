@@ -8,7 +8,9 @@ import com.proyecto.servicios.entity.Saldo;
 import com.proyecto.servicios.entity.Usuario;
 import com.proyecto.servicios.entity.gestopago.GestoPagoProducto;
 import com.proyecto.servicios.enums.EstadoPagoServicio;
+import com.proyecto.servicios.exception.CuentaNoAutorizadaException;
 import com.proyecto.servicios.exception.ProductoNoValidoException;
+import com.proyecto.servicios.exception.SaldoInsuficienteException;
 import com.proyecto.servicios.handler.Impl.PagoServicioHandlerImpl;
 import com.proyecto.servicios.model.GenericResponse;
 import com.proyecto.servicios.model.gestopago.PagoServicioRequest;
@@ -33,6 +35,7 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
@@ -215,5 +218,106 @@ class PagoServicioHandlerImplTest {
         assertThat(r1.getCodigo()).isZero();
         assertThat(r2.getCodigo()).isEqualTo(82);
         assertThat(r3.getCodigo()).isEqualTo(422);
+    }
+
+    @Test
+    @DisplayName("solicitar2FA falla si usuario está bloqueado o inactivo")
+    void solicitar2FA_UsuarioBloqueado() {
+        Solicitud2FARequestDTO req = Solicitud2FARequestDTO.builder().numCuenta(NUM_CUENTA).build();
+        when(cuentaRepository.findByNumeroCuenta(NUM_CUENTA)).thenReturn(Optional.of(cuenta));
+        usuario.setBloqueado(true);
+        when(usuarioRepository.findByUsername(USERNAME)).thenReturn(Optional.of(usuario));
+
+        assertThrows(CuentaNoAutorizadaException.class, () -> handler.solicitar2FA(req, USERNAME));
+    }
+
+    @Test
+    @DisplayName("solicitar2FA falla si cliente no coincide o está inactivo")
+    void solicitar2FA_ClienteInactivo() {
+        Solicitud2FARequestDTO req = Solicitud2FARequestDTO.builder().numCuenta(NUM_CUENTA).build();
+        when(cuentaRepository.findByNumeroCuenta(NUM_CUENTA)).thenReturn(Optional.of(cuenta));
+        cliente.setActivo(false);
+        when(usuarioRepository.findByUsername(USERNAME)).thenReturn(Optional.of(usuario));
+
+        assertThrows(CuentaNoAutorizadaException.class, () -> handler.solicitar2FA(req, USERNAME));
+    }
+
+    @Test
+    @DisplayName("solicitar2FA falla si estatus de cuenta no es activo")
+    void solicitar2FA_CuentaNoActiva() {
+        Solicitud2FARequestDTO req = Solicitud2FARequestDTO.builder().numCuenta(NUM_CUENTA).build();
+        when(cuentaRepository.findByNumeroCuenta(NUM_CUENTA)).thenReturn(Optional.of(cuenta));
+        cuenta.getEstatusCuenta().setActivo(false);
+        when(usuarioRepository.findByUsername(USERNAME)).thenReturn(Optional.of(usuario));
+
+        assertThrows(CuentaNoAutorizadaException.class, () -> handler.solicitar2FA(req, USERNAME));
+    }
+
+    @Test
+    @DisplayName("solicitar2FA falla cuando servicio no existe en catálogo")
+    void solicitar2FA_ServicioInexistente() {
+        Solicitud2FARequestDTO req = Solicitud2FARequestDTO.builder()
+                .numCuenta(NUM_CUENTA).idServicio("9999").idProducto("1111").monto(MONTO).build();
+        when(cuentaRepository.findByNumeroCuenta(NUM_CUENTA)).thenReturn(Optional.of(cuenta));
+        when(usuarioRepository.findByUsername(USERNAME)).thenReturn(Optional.of(usuario));
+        when(productoRepository.findFirstByIdServicioAndIdProducto("9999", "1111")).thenReturn(Optional.empty());
+        when(productoRepository.existsByIdServicio("9999")).thenReturn(false);
+
+        assertThrows(ProductoNoValidoException.class, () -> handler.solicitar2FA(req, USERNAME));
+    }
+
+    @Test
+    @DisplayName("solicitar2FA falla cuando producto no corresponde a servicio existente")
+    void solicitar2FA_ProductoNoCorresponde() {
+        Solicitud2FARequestDTO req = Solicitud2FARequestDTO.builder()
+                .numCuenta(NUM_CUENTA).idServicio(ID_SERVICIO).idProducto("99999").monto(MONTO).build();
+        when(cuentaRepository.findByNumeroCuenta(NUM_CUENTA)).thenReturn(Optional.of(cuenta));
+        when(usuarioRepository.findByUsername(USERNAME)).thenReturn(Optional.of(usuario));
+        when(productoRepository.findFirstByIdServicioAndIdProducto(ID_SERVICIO, "99999")).thenReturn(Optional.empty());
+        when(productoRepository.existsByIdServicio(ID_SERVICIO)).thenReturn(true);
+
+        assertThrows(ProductoNoValidoException.class, () -> handler.solicitar2FA(req, USERNAME));
+    }
+
+    @Test
+    @DisplayName("solicitar2FA falla cuando monto no corresponde al precio fijo")
+    void solicitar2FA_MontoNoCoincide() {
+        Solicitud2FARequestDTO req = Solicitud2FARequestDTO.builder()
+                .numCuenta(NUM_CUENTA).idServicio(ID_SERVICIO).idProducto(ID_PRODUCTO).monto(new BigDecimal("50.00")).build();
+        when(cuentaRepository.findByNumeroCuenta(NUM_CUENTA)).thenReturn(Optional.of(cuenta));
+        when(usuarioRepository.findByUsername(USERNAME)).thenReturn(Optional.of(usuario));
+        when(productoRepository.findFirstByIdServicioAndIdProducto(ID_SERVICIO, ID_PRODUCTO)).thenReturn(Optional.of(producto));
+
+        assertThrows(ProductoNoValidoException.class, () -> handler.solicitar2FA(req, USERNAME));
+    }
+
+    @Test
+    @DisplayName("solicitar2FA busca saldo en repositorio cuando cuenta.getSaldo() es nulo y falla si insuficiente")
+    void solicitar2FA_SaldoDesdeRepositorioInsuficiente() {
+        Solicitud2FARequestDTO req = Solicitud2FARequestDTO.builder()
+                .numCuenta(NUM_CUENTA).idServicio(ID_SERVICIO).idProducto(ID_PRODUCTO).monto(MONTO).build();
+        cuenta.setSaldo(null);
+        when(cuentaRepository.findByNumeroCuenta(NUM_CUENTA)).thenReturn(Optional.of(cuenta));
+        when(usuarioRepository.findByUsername(USERNAME)).thenReturn(Optional.of(usuario));
+        when(productoRepository.findFirstByIdServicioAndIdProducto(ID_SERVICIO, ID_PRODUCTO)).thenReturn(Optional.of(producto));
+        when(saldoRepository.findByCuentaId(1L)).thenReturn(Optional.of(Saldo.builder().saldoDisponible(new BigDecimal("10.00")).build()));
+
+        assertThrows(SaldoInsuficienteException.class, () -> handler.solicitar2FA(req, USERNAME));
+    }
+
+    @Test
+    @DisplayName("solicitar2FA con correo corto o inválido prueba ramas de enmascaramiento")
+    void solicitar2FA_CorreoCorto() {
+        Solicitud2FARequestDTO req = Solicitud2FARequestDTO.builder()
+                .numCuenta(NUM_CUENTA).idServicio(ID_SERVICIO).idProducto(ID_PRODUCTO).monto(MONTO).build();
+        cliente.setCorreo("ab@test.com");
+        when(cuentaRepository.findByNumeroCuenta(NUM_CUENTA)).thenReturn(Optional.of(cuenta));
+        when(usuarioRepository.findByUsername(USERNAME)).thenReturn(Optional.of(usuario));
+        when(productoRepository.findFirstByIdServicioAndIdProducto(ID_SERVICIO, ID_PRODUCTO)).thenReturn(Optional.of(producto));
+        when(segundoFactorService.solicitarOtp(anyLong(), anyString(), anyString(), anyLong(), anyString(), anyString(), any()))
+                .thenReturn(300);
+
+        GenericResponse resp = handler.solicitar2FA(req, USERNAME);
+        assertThat(resp).isNotNull();
     }
 }

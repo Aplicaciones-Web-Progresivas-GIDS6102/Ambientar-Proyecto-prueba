@@ -97,6 +97,20 @@ class CuentaServiceImplTest {
     }
 
     @Test
+    @DisplayName("Debe crear estatus ACTIVA si no existe en BD al crear cuenta")
+    void crearCuentaParaCliente_EstatusNoExiste_LoCrea() {
+        when(cuentaRepository.existsByNumeroCuenta(anyString())).thenReturn(true, false);
+        when(estatusCuentaRepository.findByNombreIgnoreCase("ACTIVA")).thenReturn(Optional.empty());
+        when(estatusCuentaRepository.save(any(EstatusCuenta.class))).thenReturn(estatusCuentaMock);
+        when(cuentaRepository.save(any(Cuenta.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        Cuenta cuentaCreada = cuentaService.crearCuentaParaCliente(clienteMock);
+
+        assertNotNull(cuentaCreada);
+        verify(estatusCuentaRepository, times(1)).save(any(EstatusCuenta.class));
+    }
+
+    @Test
     @DisplayName("Debe buscar cuenta por número de cuenta de forma exitosa")
     void obtenerCuentaPorNumero_Exitoso() {
         when(cuentaRepository.findByNumeroCuenta("4000123456")).thenReturn(Optional.of(cuentaMock));
@@ -128,6 +142,35 @@ class CuentaServiceImplTest {
         assertEquals(0, BigDecimal.ZERO.compareTo(saldoDTO.getSaldoDisponible()));
         assertEquals(0, BigDecimal.ZERO.compareTo(saldoDTO.getSaldoContable()));
         assertEquals("MXN", saldoDTO.getMoneda());
+    }
+
+    @Test
+    @DisplayName("Obtener saldo de cuenta que no existe lanza CuentaNoEncontradaException")
+    void obtenerSaldo_CuentaNoExiste_LanzaExcepcion() {
+        when(cuentaRepository.findByNumeroCuenta("9999")).thenReturn(Optional.empty());
+
+        assertThrows(CuentaNoEncontradaException.class, () -> cuentaService.obtenerSaldo("9999"));
+    }
+
+    @Test
+    @DisplayName("Obtener saldo de cuenta que no tiene registro de saldo lanza CuentaNoEncontradaException")
+    void obtenerSaldo_SinRegistroSaldo_LanzaExcepcion() {
+        when(cuentaRepository.findByNumeroCuenta("4000123456")).thenReturn(Optional.of(cuentaMock));
+        when(saldoRepository.findByCuentaId(100L)).thenReturn(Optional.empty());
+
+        assertThrows(CuentaNoEncontradaException.class, () -> cuentaService.obtenerSaldo("4000123456"));
+    }
+
+    @Test
+    @DisplayName("Debe obtener las cuentas de un cliente específico")
+    void obtenerCuentasDeCliente_Exitoso() {
+        when(cuentaRepository.findByClienteId(1L)).thenReturn(List.of(cuentaMock));
+
+        List<CuentaResponseDTO> resultado = cuentaService.obtenerCuentasDeCliente(1L);
+
+        assertNotNull(resultado);
+        assertEquals(1, resultado.size());
+        assertEquals("4000123456", resultado.get(0).getNumeroCuenta());
     }
 
     @Test

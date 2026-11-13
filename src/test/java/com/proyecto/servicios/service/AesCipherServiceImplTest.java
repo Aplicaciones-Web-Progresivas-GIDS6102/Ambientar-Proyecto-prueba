@@ -1,5 +1,6 @@
 package com.proyecto.servicios.service;
 
+import com.proyecto.servicios.exception.CifradoException;
 import com.proyecto.servicios.service.Impl.AesCipherServiceImpl;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -44,5 +45,43 @@ class AesCipherServiceImplTest {
     @DisplayName("Descifrar texto nulo lanza excepción")
     void descifrar_Nulo_LanzaExcepcion() {
         assertThrows(IllegalArgumentException.class, () -> cipherService.descifrar(null));
+    }
+
+    @Test
+    @DisplayName("Descifrar texto corrupto lanza CifradoException")
+    void descifrar_Corrupto_LanzaCifradoException() {
+        assertThrows(CifradoException.class, () -> cipherService.descifrar("texto-no-cifrado-invalido"));
+    }
+
+    @Test
+    @DisplayName("Validar configuración con Base64 inválido lanza IllegalStateException")
+    void validarConfiguracion_Base64Invalido() {
+        AesCipherServiceImpl badService = new AesCipherServiceImpl();
+        ReflectionTestUtils.setField(badService, "aesKeyBase64", "!!!not-valid-base64???");
+        ReflectionTestUtils.setField(badService, "aesIvBase64", "MDEyMzQ1Njc4OWFiY2RlZg==");
+
+        assertThrows(IllegalStateException.class, badService::validarConfiguracion);
+    }
+
+    @Test
+    @DisplayName("Validar configuración con longitud de clave inválida lanza IllegalStateException")
+    void validarConfiguracion_LongitudClaveInvalida() {
+        AesCipherServiceImpl badService = new AesCipherServiceImpl();
+        // 10 bytes key instead of 16/24/32
+        ReflectionTestUtils.setField(badService, "aesKeyBase64", "MDEyMzQ1Njc4OQ==");
+        ReflectionTestUtils.setField(badService, "aesIvBase64", "MDEyMzQ1Njc4OWFiY2RlZg==");
+
+        assertThrows(IllegalStateException.class, badService::validarConfiguracion);
+    }
+
+    @Test
+    @DisplayName("Validar configuración con longitud de IV inválida lanza IllegalStateException")
+    void validarConfiguracion_LongitudIvInvalida() {
+        AesCipherServiceImpl badService = new AesCipherServiceImpl();
+        ReflectionTestUtils.setField(badService, "aesKeyBase64", "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=");
+        // 8 bytes IV instead of 16
+        ReflectionTestUtils.setField(badService, "aesIvBase64", "MDEyMzQ1Njc=");
+
+        assertThrows(IllegalStateException.class, badService::validarConfiguracion);
     }
 }

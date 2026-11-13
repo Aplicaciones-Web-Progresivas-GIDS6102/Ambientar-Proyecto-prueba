@@ -338,14 +338,14 @@ public class SentTxGatewayImpl implements SentTxGateway {
         String codigo = xmlResp != null ? xmlResp.obtenerCodigo() : null;
 
         EstadoPagoServicio nuevoEstado;
-        if ("Applied".equalsIgnoreCase(estadoProveedor) || texto.contains("Applied") || CODIGO_PROVEEDOR_EXITO.equals(codigo)) {
-            nuevoEstado = EstadoPagoServicio.APLICADO;
-            actualizarTransaccion(tx, "APLICADO", codigo != null ? codigo : "Applied", texto);
-            log.info("Transacción confirmada como APLICADA vía confirmTx.do. upc={}", upc);
-        } else if ("Not Applied".equalsIgnoreCase(estadoProveedor) || texto.contains("Not Applied")) {
+        if ("Not Applied".equalsIgnoreCase(estadoProveedor) || texto.contains("Not Applied")) {
             nuevoEstado = EstadoPagoServicio.RECHAZADO;
             actualizarTransaccion(tx, "RECHAZADO", codigo != null ? codigo : "Not Applied", texto);
             log.info("Transacción confirmada como RECHAZADA vía confirmTx.do. upc={}", upc);
+        } else if ("Applied".equalsIgnoreCase(estadoProveedor) || texto.contains("Applied") || CODIGO_PROVEEDOR_EXITO.equals(codigo)) {
+            nuevoEstado = EstadoPagoServicio.APLICADO;
+            actualizarTransaccion(tx, "APLICADO", codigo != null ? codigo : "Applied", texto);
+            log.info("Transacción confirmada como APLICADA vía confirmTx.do. upc={}", upc);
         } else {
             nuevoEstado = EstadoPagoServicio.PENDIENTE_CONFIRMACION;
             log.warn("Estado indeterminado devuelto por confirmTx.do para upc={}", upc);

@@ -27,11 +27,11 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -79,17 +79,20 @@ class AuthServiceImplTest {
     }
 
     @Test
-    @DisplayName("Login Exitoso: Retorna token JWT y registra sesión activa")
+    @DisplayName("Login Exitoso: Retorna token JWT y desactiva sesiones previas")
     void login_Exitoso() {
         LoginRequestDTO request = LoginRequestDTO.builder()
                 .username("juanperez")
                 .password("password123")
                 .build();
 
+        Sesion previaActiva = Sesion.builder().id(100L).activa(true).build();
+        Sesion previaInactiva = Sesion.builder().id(101L).activa(false).build();
+
         when(usuarioRepository.findByUsername("juanperez")).thenReturn(Optional.of(usuarioMock));
         when(passwordEncoder.matches("password123", "encodedPassword123")).thenReturn(true);
         when(jwtUtil.generateToken("juanperez", 1L)).thenReturn("mock.jwt.token");
-        when(sesionRepository.findByUsuarioId(10L)).thenReturn(new ArrayList<>());
+        when(sesionRepository.findByUsuarioId(10L)).thenReturn(List.of(previaActiva, previaInactiva));
 
         AuthResponseDTO response = authService.login(request);
 
@@ -99,6 +102,8 @@ class AuthServiceImplTest {
         assertEquals("juanperez", response.getUsername());
         assertEquals(1L, response.getClienteId());
 
+        assertFalse(previaActiva.getActiva());
+        verify(sesionRepository, times(1)).saveAll(any());
         verify(sesionRepository, times(1)).save(any(Sesion.class));
     }
 
@@ -120,6 +125,25 @@ class AuthServiceImplTest {
     }
 
     @Test
+    @DisplayName("Login Falla: Quinto intento fallido bloquea el usuario")
+    void login_Falla_QuintoIntentoBloquea() {
+        usuarioMock.setIntentosFallidos(4);
+        LoginRequestDTO request = LoginRequestDTO.builder()
+                .username("juanperez")
+                .password("wrongpassword")
+                .build();
+
+        when(usuarioRepository.findByUsername("juanperez")).thenReturn(Optional.of(usuarioMock));
+        when(passwordEncoder.matches("wrongpassword", "encodedPassword123")).thenReturn(false);
+
+        assertThrows(CredencialesInvalidasException.class, () -> authService.login(request));
+
+        assertEquals(5, usuarioMock.getIntentosFallidos());
+        assertTrue(usuarioMock.getBloqueado());
+        verify(usuarioRepository, times(1)).save(usuarioMock);
+    }
+
+    @Test
     @DisplayName("Login Falla: Usuario o contraseña no existen")
     void login_Falla_UsuarioNoExiste() {
         LoginRequestDTO request = LoginRequestDTO.builder()
@@ -133,9 +157,24 @@ class AuthServiceImplTest {
     }
 
     @Test
-    @DisplayName("Login Falla: Usuario bloqueado")
+    @DisplayName("Login Falla: Usuario bloqueado o inactivo")
     void login_Falla_UsuarioBloqueado() {
         usuarioMock.setBloqueado(true);
+        LoginRequestDTO request = LoginRequestDTO.builder()
+                .username("juanperez")
+                .password("password123")
+                .build();
+
+        when(usuarioRepository.findByUsername("juanperez")).thenReturn(Optional.of(usuarioMock));
+        when(passwordEncoder.matches("password123", "encodedPassword123")).thenReturn(true);
+
+        assertThrows(ValidacionNegocioException.class, () -> authService.login(request));
+    }
+
+    @Test
+    @DisplayName("Login Falla: Cliente inactivo o nulo")
+    void login_Falla_ClienteInactivo() {
+        clienteMock.setActivo(false);
         LoginRequestDTO request = LoginRequestDTO.builder()
                 .username("juanperez")
                 .password("password123")
@@ -187,5 +226,36 @@ class AuthServiceImplTest {
         when(usuarioRepository.existsByUsername("juanperez")).thenReturn(true);
 
         assertThrows(UsuarioYaExisteException.class, () -> authService.register(request));
+    }
+
+    @Test
+    @DisplayName("Registro Falla: Cliente no existe")
+    void register_Falla_ClienteNoExiste() {
+        RegisterRequestDTO request = RegisterRequestDTO.builder()
+                .clienteId(99L)
+                .username("nuevousuario")
+                .password("pass123")
+                .build();
+
+        when(usuarioRepository.existsByUsername("nuevousuario")).thenReturn(false);
+        when(clienteRepository.findById(99L)).thenReturn(Optional.empty());
+
+        assertThrows(ClienteNoEncontradoException.class, () -> authService.register(request));
+    }
+
+    @Test
+    @DisplayName("Registro Falla: Cliente ya posee un usuario registrado")
+    void register_Falla_ClienteYaTieneUsuario() {
+        RegisterRequestDTO request = RegisterRequestDTO.builder()
+                .clienteId(1L)
+                .username("nuevousuario")
+                .password("pass123")
+                .build();
+
+        when(usuarioRepository.existsByUsername("nuevousuario")).thenReturn(false);
+        when(clienteRepository.findById(1L)).thenReturn(Optional.of(clienteMock));
+        when(usuarioRepository.findByClienteId(1L)).thenReturn(Optional.of(usuarioMock));
+
+        assertThrows(ValidacionNegocioException.class, () -> authService.register(request));
     }
 }

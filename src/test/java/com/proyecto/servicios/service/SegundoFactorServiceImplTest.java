@@ -19,6 +19,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.Collections;
+import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -53,14 +54,17 @@ class SegundoFactorServiceImplTest {
 
     @Test
     void solicitarOtp_GeneraCodigoSeguroYEnviaPorCorreo() {
-        when(otpRepository.findAllByClienteIdAndConsumedFalse(CLIENTE_ID)).thenReturn(Collections.emptyList());
+        OtpVerification previo = OtpVerification.builder().clienteId(CLIENTE_ID).consumed(false).build();
+        when(otpRepository.findAllByClienteIdAndConsumedFalse(CLIENTE_ID)).thenReturn(List.of(previo));
 
         int vigencia = segundoFactorService.solicitarOtp(CLIENTE_ID, CORREO, "Carlos", CUENTA_ID, SERVICIO, PRODUCTO, MONTO);
 
         assertThat(vigencia).isEqualTo(300); // 5 minutos = 300 segundos
+        assertThat(previo.isConsumed()).isTrue();
+        verify(otpRepository, atLeastOnce()).save(any(OtpVerification.class));
 
         ArgumentCaptor<OtpVerification> captor = ArgumentCaptor.forClass(OtpVerification.class);
-        verify(otpRepository).save(captor.capture());
+        verify(otpRepository, atLeastOnce()).save(captor.capture());
         OtpVerification guardado = captor.getValue();
 
         assertThat(guardado.getClienteId()).isEqualTo(CLIENTE_ID);
@@ -153,6 +157,31 @@ class SegundoFactorServiceImplTest {
     }
 
     @Test
+    void validarYConsumir_IntentosPreviosYaAgotados_BloqueaInmediatamente() {
+        String hash = passwordEncoder.encode("543210");
+        String opHash = SegundoFactorServiceImpl.calcularHashOperacion(CUENTA_ID, SERVICIO, PRODUCTO, MONTO);
+
+        OtpVerification otp = OtpVerification.builder()
+                .id(1L)
+                .clienteId(CLIENTE_ID)
+                .operacionHash(opHash)
+                .otpHash(hash)
+                .expiresAt(LocalDateTime.now().plusMinutes(5))
+                .attempts(3) // Ya en 3
+                .consumed(false)
+                .build();
+
+        when(otpRepository.findTopByClienteIdAndOperacionHashAndConsumedFalseOrderByIdDesc(CLIENTE_ID, opHash))
+                .thenReturn(Optional.of(otp));
+
+        assertThatThrownBy(() -> segundoFactorService.validarYConsumir(CLIENTE_ID, CUENTA_ID, SERVICIO, PRODUCTO, MONTO, "543210"))
+                .isInstanceOf(OtpIntentosAgotadosException.class);
+
+        assertThat(otp.isConsumed()).isTrue();
+        verify(otpRepository).save(otp);
+    }
+
+    @Test
     void validarYConsumir_OtpExpirado_LanzaOtpExpiradoException() {
         String hash = passwordEncoder.encode("543210");
         String opHash = SegundoFactorServiceImpl.calcularHashOperacion(CUENTA_ID, SERVICIO, PRODUCTO, MONTO);
@@ -205,6 +234,19 @@ class SegundoFactorServiceImplTest {
     }
 
     @Test
+    @DisplayName("validarYConsumir sin OTP previo en BD para cliente lanza SegundoFactorInvalidoException")
+    void validarYConsumir_SinOtpParaOperacion() {
+        when(otpRepository.findTopByClienteIdAndOperacionHashAndConsumedFalseOrderByIdDesc(any(), any()))
+                .thenReturn(Optional.empty());
+        when(otpRepository.findTopByClienteIdAndConsumedFalseOrderByIdDesc(any()))
+                .thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> segundoFactorService.validarYConsumir(CLIENTE_ID, CUENTA_ID, SERVICIO, PRODUCTO, MONTO, "543210"))
+                .isInstanceOf(SegundoFactorInvalidoException.class)
+                .hasMessageContaining("No existe un código de segunda autenticación activo para esta operación");
+    }
+
+    @Test
     @DisplayName("validarYConsumir sobrecarga por cliente y código")
     void validarYConsumir_SobrecargaCliente() {
         String hash = passwordEncoder.encode("123456");
@@ -223,6 +265,16 @@ class SegundoFactorServiceImplTest {
     }
 
     @Test
+    @DisplayName("validarYConsumir sobrecarga por cliente y código cuando no existe")
+    void validarYConsumir_SobrecargaCliente_NoExiste() {
+        when(otpRepository.findTopByClienteIdAndConsumedFalseOrderByIdDesc(CLIENTE_ID)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> segundoFactorService.validarYConsumir(CLIENTE_ID, "123456"))
+                .isInstanceOf(SegundoFactorInvalidoException.class)
+                .hasMessageContaining("No existe un código de segunda autenticación activo para este cliente");
+    }
+
+    @Test
     @DisplayName("solicitarOtp validaciones de argumentos obligatorios")
     void solicitarOtp_Validaciones() {
         assertThatThrownBy(() -> segundoFactorService.solicitarOtp(null, "correo@test.com", "Juan", CUENTA_ID, SERVICIO, PRODUCTO, MONTO))
@@ -230,6 +282,8 @@ class SegundoFactorServiceImplTest {
         assertThatThrownBy(() -> segundoFactorService.solicitarOtp(CLIENTE_ID, "   ", "Juan", CUENTA_ID, SERVICIO, PRODUCTO, MONTO))
                 .isInstanceOf(SegundoFactorInvalidoException.class);
         assertThatThrownBy(() -> segundoFactorService.validarYConsumir(CLIENTE_ID, null))
+                .isInstanceOf(SegundoFactorInvalidoException.class);
+        assertThatThrownBy(() -> segundoFactorService.validarYConsumir(CLIENTE_ID, CUENTA_ID, SERVICIO, PRODUCTO, MONTO, "   "))
                 .isInstanceOf(SegundoFactorInvalidoException.class);
     }
 }
