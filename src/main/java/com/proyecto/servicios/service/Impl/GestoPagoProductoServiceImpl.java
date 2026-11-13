@@ -72,6 +72,7 @@ public class GestoPagoProductoServiceImpl implements GestoPagoProductoService {
      * Consulta los productos. Primero revisa Redis Caché; si no está en caché, sincroniza.
      */
     @Override
+    @Transactional
     public ConsultaProductosResponse obtenerProductos(ConsultaProductosRequest request) {
         log.info("Iniciando consulta de productos GestoPago...");
 
