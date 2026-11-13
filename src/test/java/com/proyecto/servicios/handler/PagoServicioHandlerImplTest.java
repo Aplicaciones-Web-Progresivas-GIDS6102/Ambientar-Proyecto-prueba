@@ -181,4 +181,39 @@ class PagoServicioHandlerImplTest {
         assertThat(response.getBody()).isNotNull();
         assertThat(response.getBody().getCodigo()).isEqualTo(82);
     }
+
+    @Test
+    @DisplayName("procesarPago rechazado retorna HTTP 422 y código 422")
+    void procesarPago_Rechazado() {
+        PagoServicioRequest req = PagoServicioRequest.builder().build();
+        PagoServicioResponse pagoResp = PagoServicioResponse.builder()
+                .estado(EstadoPagoServicio.RECHAZADO)
+                .mensaje("Rechazado")
+                .build();
+        when(pagoServicioService.pagarServicio(any(), any())).thenReturn(pagoResp);
+
+        ResponseEntity<GenericResponse> response = handler.procesarPago(req, USERNAME);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNPROCESSABLE_ENTITY);
+        assertThat(response.getBody().getCodigo()).isEqualTo(422);
+    }
+
+    @Test
+    @DisplayName("conciliarTransaccion para estados APLICADO, PENDIENTE y RECHAZADO")
+    void conciliarTransaccion_Estados() {
+        when(pagoServicioService.conciliarTransaccion("UPC1")).thenReturn(
+                PagoServicioResponse.builder().estado(EstadoPagoServicio.APLICADO).build());
+        when(pagoServicioService.conciliarTransaccion("UPC2")).thenReturn(
+                PagoServicioResponse.builder().estado(EstadoPagoServicio.PENDIENTE_CONFIRMACION).build());
+        when(pagoServicioService.conciliarTransaccion("UPC3")).thenReturn(
+                PagoServicioResponse.builder().estado(EstadoPagoServicio.RECHAZADO).build());
+
+        GenericResponse r1 = handler.conciliarTransaccion("UPC1");
+        GenericResponse r2 = handler.conciliarTransaccion("UPC2");
+        GenericResponse r3 = handler.conciliarTransaccion("UPC3");
+
+        assertThat(r1.getCodigo()).isZero();
+        assertThat(r2.getCodigo()).isEqualTo(82);
+        assertThat(r3.getCodigo()).isEqualTo(422);
+    }
 }

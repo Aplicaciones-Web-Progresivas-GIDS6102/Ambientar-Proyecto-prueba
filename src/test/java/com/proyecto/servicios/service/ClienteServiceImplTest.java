@@ -321,4 +321,18 @@ class ClienteServiceImplTest {
         assertThrows(ClienteYaEliminadoException.class, () -> clienteService.darDeBaja(request));
         verify(clienteRepository, never()).save(any());
     }
+
+    @Test
+    @DisplayName("Crear cliente con nacionalidadId y estadoCivilId existentes")
+    void crearCliente_ConIdsExistentes() {
+        requestDTO.setNacionalidadId(5L);
+        requestDTO.setEstadoCivilId(3L);
+        when(paisRepository.findById(5L)).thenReturn(Optional.of(paisMock));
+        when(estadoCivilRepository.findById(3L)).thenReturn(Optional.of(estadoCivilMock));
+        when(cuentaService.crearCuentaParaCliente(any(Cliente.class))).thenReturn(cuentaMock);
+        when(clienteRepository.save(any(Cliente.class))).thenReturn(clienteMock);
+
+        ClienteResponseDTO resp = clienteService.crearCliente(requestDTO);
+        assertNotNull(resp);
+    }
 }

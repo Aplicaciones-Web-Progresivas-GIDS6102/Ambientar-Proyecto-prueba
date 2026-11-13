@@ -28,10 +28,12 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
@@ -167,5 +169,46 @@ class GestoPagoProductoServiceImplTest {
         assertNotNull(response);
         assertEquals("530", response.getCodigo());
         assertTrue(response.getMensaje().contains("no existen datos almacenados"));
+    }
+
+    @Test
+    @DisplayName("Modo offline recupera productos de la base de datos cuando existen registros")
+    void sincronizarProductos_Offline_ConProductosEnBd() {
+        Request feignRequest = Request.create(Request.HttpMethod.GET, "/sistema/service/getProductList.do",
+                Collections.emptyMap(), null, new RequestTemplate());
+        when(gestoPagoProductClient.getProductList(anyString()))
+                .thenThrow(new FeignException.ServiceUnavailable("Timeout", feignRequest, null, null));
+
+        GestoPagoProducto prod = GestoPagoProducto.builder()
+                .servicio("CFE")
+                .producto("Pago CFE")
+                .tipoFront("1")
+                .precio(150.0)
+                .build();
+        when(gestoPagoProductoRepository.findAll()).thenReturn(List.of(prod));
+
+        ConsultaProductosResponse response = productoService.sincronizarProductos();
+
+        assertNotNull(response);
+        assertEquals("01", response.getCodigo());
+        assertThat(response.getProductos()).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("Obtener productos recupera desde Redis Cache cuando está presente")
+    void obtenerProductos_CacheHit_RetornaCache() {
+        ConsultaProductosResponse cached = ConsultaProductosResponse.builder()
+                .codigo("01")
+                .mensaje("Desde cache")
+                .productos(new ArrayList<>())
+                .build();
+        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+        when(valueOperations.get("gestopago:productos:catalogo")).thenReturn(cached);
+
+        ConsultaProductosResponse response = productoService.obtenerProductos(new ConsultaProductosRequest());
+
+        assertNotNull(response);
+        assertEquals("Desde cache", response.getMensaje());
+        verify(gestoPagoProductClient, never()).getProductList(anyString());
     }
 }

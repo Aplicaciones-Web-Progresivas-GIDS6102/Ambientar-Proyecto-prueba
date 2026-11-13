@@ -7,6 +7,7 @@ import com.proyecto.servicios.exception.SegundoFactorInvalidoException;
 import com.proyecto.servicios.repositorys.gestopago.OtpVerificationRepository;
 import com.proyecto.servicios.service.Impl.SegundoFactorServiceImpl;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -201,5 +202,34 @@ class SegundoFactorServiceImplTest {
         assertThatThrownBy(() -> segundoFactorService.validarYConsumir(CLIENTE_ID, CUENTA_ID, "9999", "88888", new BigDecimal("500.00"), "543210"))
                 .isInstanceOf(SegundoFactorInvalidoException.class)
                 .hasMessageContaining("pertenece a otra operación");
+    }
+
+    @Test
+    @DisplayName("validarYConsumir sobrecarga por cliente y código")
+    void validarYConsumir_SobrecargaCliente() {
+        String hash = passwordEncoder.encode("123456");
+        OtpVerification otp = OtpVerification.builder()
+                .id(2L)
+                .clienteId(CLIENTE_ID)
+                .otpHash(hash)
+                .expiresAt(LocalDateTime.now().plusMinutes(5))
+                .attempts(0)
+                .consumed(false)
+                .build();
+        when(otpRepository.findTopByClienteIdAndConsumedFalseOrderByIdDesc(CLIENTE_ID)).thenReturn(Optional.of(otp));
+
+        boolean ok = segundoFactorService.validarYConsumir(CLIENTE_ID, "123456");
+        assertThat(ok).isTrue();
+    }
+
+    @Test
+    @DisplayName("solicitarOtp validaciones de argumentos obligatorios")
+    void solicitarOtp_Validaciones() {
+        assertThatThrownBy(() -> segundoFactorService.solicitarOtp(null, "correo@test.com", "Juan", CUENTA_ID, SERVICIO, PRODUCTO, MONTO))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> segundoFactorService.solicitarOtp(CLIENTE_ID, "   ", "Juan", CUENTA_ID, SERVICIO, PRODUCTO, MONTO))
+                .isInstanceOf(SegundoFactorInvalidoException.class);
+        assertThatThrownBy(() -> segundoFactorService.validarYConsumir(CLIENTE_ID, null))
+                .isInstanceOf(SegundoFactorInvalidoException.class);
     }
 }
