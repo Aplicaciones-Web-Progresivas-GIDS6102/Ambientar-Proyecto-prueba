@@ -17,6 +17,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
 
@@ -50,14 +51,14 @@ class BiometriaServiceImplTest {
                 .tipoBiometria(TipoBiometria.HUELLA_DACTILAR)
                 .hashBiometrico("hash123")
                 .algoritmo("SHA-256")
-                .puntuacionCalidad(95)
+                .puntuacionCalidad(new BigDecimal("95.00"))
                 .activo(true)
                 .build();
         dtoMock = BiometriaClienteDTO.builder()
                 .clienteId(1L)
                 .tipoBiometria(TipoBiometria.HUELLA_DACTILAR)
                 .hashBiometrico("hash123")
-                .puntuacionCalidad(95)
+                .puntuacionCalidad(new BigDecimal("95.00"))
                 .build();
     }
 
