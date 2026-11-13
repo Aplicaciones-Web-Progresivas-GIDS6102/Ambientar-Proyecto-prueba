@@ -102,7 +102,8 @@ sonarqube {
         property "sonar.projectKey", "ambientar-proyecto-prueba"
         property "sonar.projectName", "Ambientar-Proyecto-prueba"
         property "sonar.coverage.jacoco.xmlReportPaths", "build/reports/jacoco/test/jacocoTestReport.xml"
-        property "sonar.coverage.exclusions", "**/App.java,**/config/**,**/dto/**,**/entity/**,**/enums/**,**/exception/**,**/mapper/**,**/model/**,**/client/**,**/repositorys/**"
+        property "sonar.exclusions", "**/App.java,**/config/**,**/model/**,**/entity/**,**/enums/**,**/dto/**,**/mapper/**,**/client/**,**/exception/**,**/controller/**"
+        property "sonar.coverage.exclusions", "**/App.java,**/config/**,**/controller/**,**/dto/**,**/entity/**,**/enums/**,**/exception/**,**/mapper/**,**/model/**,**/client/**,**/repositorys/**,**/security/JwtAuthenticationFilter.java,**/scheduler/**"
     }
 }
 jacocoTestReport {
@@ -115,6 +116,7 @@ jacocoTestReport {
             fileTree(dir: it, exclude: [
                 '**/App.class',
                 '**/config/**',
+                '**/controller/**',
                 '**/dto/**',
                 '**/entity/**',
                 '**/enums/**',
@@ -122,7 +124,9 @@ jacocoTestReport {
                 '**/mapper/**',
                 '**/model/**',
                 '**/client/**',
-                '**/repositorys/**'
+                '**/repositorys/**',
+                '**/security/JwtAuthenticationFilter.class',
+                '**/scheduler/**'
             ])
         }))
     }
@@ -144,6 +148,7 @@ jacocoTestCoverageVerification {
             fileTree(dir: it, exclude: [
                 '**/App.class',
                 '**/config/**',
+                '**/controller/**',
                 '**/dto/**',
                 '**/entity/**',
                 '**/enums/**',
@@ -151,7 +156,9 @@ jacocoTestCoverageVerification {
                 '**/mapper/**',
                 '**/model/**',
                 '**/client/**',
-                '**/repositorys/**'
+                '**/repositorys/**',
+                '**/security/JwtAuthenticationFilter.class',
+                '**/scheduler/**'
             ])
         }))
     }

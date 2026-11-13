@@ -22,8 +22,11 @@ import java.time.format.DateTimeFormatter;
 
 public class App implements CommandLineRunner {
 
-    @Autowired
-    private ApplicationContext context;
+    private final ApplicationContext context;
+
+    public App(ApplicationContext context) {
+        this.context = context;
+    }
 
 
     public static void main(String[] args) {

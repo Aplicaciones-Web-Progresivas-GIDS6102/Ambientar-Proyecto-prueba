@@ -37,6 +37,7 @@ public class SecurityConfig {
     }
 
     @Bean
+    @SuppressWarnings("java:S4502") // API REST sin estado (Stateless) con JWT Bearer en encabezado Authorization, no utiliza cookies vulnerables a CSRF
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
                 .csrf(AbstractHttpConfigurer::disable)

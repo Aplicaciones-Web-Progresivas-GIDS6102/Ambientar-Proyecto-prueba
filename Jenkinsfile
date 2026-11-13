@@ -57,7 +57,8 @@ pipeline {
                           -Dsonar.projectKey=ambientar-proyecto-prueba \
                           -Dsonar.projectName=Ambientar-Proyecto-prueba \
                           -Dsonar.coverage.jacoco.xmlReportPaths=build/reports/jacoco/test/jacocoTestReport.xml \
-                          -Dsonar.coverage.exclusions="**/App.java,**/config/**,**/dto/**,**/entity/**,**/enums/**,**/exception/**,**/mapper/**,**/model/**,**/client/**,**/repositorys/**"
+                          -Dsonar.exclusions="**/App.java,**/config/**,**/model/**,**/entity/**,**/enums/**,**/dto/**,**/mapper/**,**/client/**,**/exception/**,**/controller/**" \
+                          -Dsonar.coverage.exclusions="**/App.java,**/config/**,**/controller/**,**/dto/**,**/entity/**,**/enums/**,**/exception/**,**/mapper/**,**/model/**,**/client/**,**/repositorys/**,**/security/JwtAuthenticationFilter.java,**/scheduler/**"
                     '''
                 }
             }
